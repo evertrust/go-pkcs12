@@ -457,6 +457,16 @@ func getSafeContents(p12Data, password []byte, expectedItems int) (bags []safeBa
 // LocalKeyId attribute set to the SHA-1 fingerprint of the end-entity
 // certificate.
 func Encode(rand io.Reader, privateKey interface{}, certificate *x509.Certificate, caCerts []*x509.Certificate, password string) (pfxData []byte, err error) {
+	return EncodeWithAttributes(rand, privateKey, certificate, caCerts, password, "", "")
+}
+
+// EncodeWithAttributes produces pfxData exactly the same way as Encode does,
+// except that it includes the specified Microsoft CSP Name attribute on
+// the private key, and the friendly name on certificate and key.
+//
+// This attribute is needed for Windows, as it's the only way to specify
+// in which CSP/KSP the PKCS#12 should be imported
+func EncodeWithAttributes(rand io.Reader, privateKey interface{}, certificate *x509.Certificate, caCerts []*x509.Certificate, password, friendlyName, cspName string) (pfxData []byte, err error) {
 	encodedPassword, err := bmpStringZeroTerminated(password)
 	if err != nil {
 		return nil, err
@@ -475,9 +485,41 @@ func Encode(rand io.Reader, privateKey interface{}, certificate *x509.Certificat
 		return nil, err
 	}
 
+	// Build the friendly name
+	var friendlyNameAttribute pkcs12Attribute
+	if friendlyName != "" {
+		bmpFriendlyName, err := bmpString(friendlyName)
+		if err != nil {
+			return nil, err
+		}
+		encodedFriendlyName, err := asn1.Marshal(asn1.RawValue{
+			Class:      0,
+			Tag:        30,
+			IsCompound: false,
+			Bytes:      bmpFriendlyName,
+		})
+		if err != nil {
+			return nil, err
+		}
+		friendlyNameAttribute = pkcs12Attribute{
+			Id: oidFriendlyName,
+			Value: asn1.RawValue{
+				Class:      0,
+				Tag:        17,
+				IsCompound: true,
+				Bytes:      encodedFriendlyName,
+			},
+		}
+	}
+	// then add friendly name to cert attributes
+	certAttributes := []pkcs12Attribute{localKeyIdAttr}
+	if friendlyName != "" {
+		certAttributes = append(certAttributes, friendlyNameAttribute)
+	}
+
 	var certBags []safeBag
 	var certBag *safeBag
-	if certBag, err = makeCertBag(certificate.Raw, []pkcs12Attribute{localKeyIdAttr}); err != nil {
+	if certBag, err = makeCertBag(certificate.Raw, certAttributes); err != nil {
 		return nil, err
 	}
 	certBags = append(certBags, *certBag)
@@ -489,6 +531,33 @@ func Encode(rand io.Reader, privateKey interface{}, certificate *x509.Certificat
 		certBags = append(certBags, *certBag)
 	}
 
+	// Now the Microsoft CSP Name
+	var cspNameAttribute pkcs12Attribute
+	if cspName != "" {
+		bmpCSPName, err := bmpString(cspName)
+		if err != nil {
+			return nil, err
+		}
+		encodedCSPName, err := asn1.Marshal(asn1.RawValue{
+			Class:      0,
+			Tag:        30,
+			IsCompound: false,
+			Bytes:      bmpCSPName,
+		})
+		if err != nil {
+			return nil, err
+		}
+		cspNameAttribute = pkcs12Attribute{
+			Id: oidMicrosoftCSPName,
+			Value: asn1.RawValue{
+				Class:      0,
+				Tag:        17,
+				IsCompound: true,
+				Bytes:      encodedCSPName,
+			},
+		}
+	}
+
 	var keyBag safeBag
 	keyBag.Id = oidPKCS8ShroundedKeyBag
 	keyBag.Value.Class = 2
@@ -497,7 +566,13 @@ func Encode(rand io.Reader, privateKey interface{}, certificate *x509.Certificat
 	if keyBag.Value.Bytes, err = encodePkcs8ShroudedKeyBag(rand, privateKey, encodedPassword); err != nil {
 		return nil, err
 	}
+	if friendlyName != "" {
+		keyBag.Attributes = append(keyBag.Attributes, friendlyNameAttribute)
+	}
 	keyBag.Attributes = append(keyBag.Attributes, localKeyIdAttr)
+	if cspName != "" {
+		keyBag.Attributes = append(keyBag.Attributes, cspNameAttribute)
+	}
 
 	// Construct an authenticated safe with two SafeContents.
 	// The first SafeContents is encrypted and contains the cert bags.
