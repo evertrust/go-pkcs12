@@ -464,7 +464,7 @@ func Encode(rand io.Reader, privateKey interface{}, certificate *x509.Certificat
 // except that it includes the specified Microsoft CSP Name attribute on
 // the private key, and the friendly name on certificate and key.
 //
-// This attribute is needed for Windows, as it's the only way to specify
+// The CSP Name attribute is needed for Windows, as it's the only way to specify
 // in which CSP/KSP the PKCS#12 should be imported
 func EncodeWithAttributes(rand io.Reader, privateKey interface{}, certificate *x509.Certificate, caCerts []*x509.Certificate, password, friendlyName, cspName string) (pfxData []byte, err error) {
 	encodedPassword, err := bmpStringZeroTerminated(password)
