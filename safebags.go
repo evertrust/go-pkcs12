@@ -48,9 +48,9 @@ func decodePkcs8ShroudedKeyBag(asn1Data, password []byte) (privateKey interface{
 	return privateKey, nil
 }
 
-func encodePkcs8ShroudedKeyBag(rand io.Reader, privateKey interface{}, algoID asn1.ObjectIdentifier, password []byte, iterations int, saltLen int) (asn1Data []byte, err error) {
+func encodePkcs8ShroudedKeyBag(rand io.Reader, certificate *x509.Certificate, privateKey interface{}, algoID asn1.ObjectIdentifier, password []byte, iterations int, saltLen int) (asn1Data []byte, err error) {
 	var pkData []byte
-	if pkData, err = x509.MarshalPKCS8PrivateKey(privateKey); err != nil {
+	if pkData, err = marshalPKCS8PrivateKey(certificate, privateKey); err != nil {
 		return nil, errors.New("pkcs12: error encoding PKCS#8 private key: " + err.Error())
 	}
 

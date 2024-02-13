@@ -60,21 +60,21 @@ type Encoder struct {
 // See https://neilmadden.blog/2023/01/09/on-pbkdf2-iterations/ for more detail.
 //
 // Panics if iterations is less than 1.
-func (enc Encoder) WithIterations(iterations int) *Encoder {
+func (enc *Encoder) WithIterations(iterations int) *Encoder {
 	if iterations < 1 {
 		panic("pkcs12: number of iterations is less than 1")
 	}
 	enc.macIterations = iterations
 	enc.encryptionIterations = iterations
-	return &enc
+	return enc
 }
 
 // WithRand creates a new Encoder identical to enc except that
 // it will use the given io.Reader for its random number generator
 // instead of [crypto/rand.Reader].
-func (enc Encoder) WithRand(rand io.Reader) *Encoder {
+func (enc *Encoder) WithRand(rand io.Reader) *Encoder {
 	enc.rand = rand
-	return &enc
+	return enc
 }
 
 // LegacyRC2 encodes PKCS#12 files using weak algorithms that were
@@ -607,7 +607,7 @@ func getSafeContents(p12Data, password []byte, expectedItemsMin int, expectedIte
 // better compatibility, use Legacy.Encode; for better
 // security, use Modern.Encode.
 func Encode(rand io.Reader, privateKey interface{}, certificate *x509.Certificate, caCerts []*x509.Certificate, password string) (pfxData []byte, err error) {
-	return LegacyRC2.WithRand(rand).Encode(privateKey, certificate, caCerts, password, "", "")
+	return LegacyRC2.WithRand(rand).Encode(privateKey, certificate, caCerts, password)
 }
 
 // Encode produces pfxData containing one private key (privateKey), an
@@ -623,7 +623,24 @@ func Encode(rand io.Reader, privateKey interface{}, certificate *x509.Certificat
 // private key shrouded with the key encryption algorithm.  The private key bag and
 // the end-entity certificate bag have the LocalKeyId attribute set to the SHA-1
 // fingerprint of the end-entity certificate.
-func (enc *Encoder) Encode(privateKey interface{}, certificate *x509.Certificate, caCerts []*x509.Certificate, password, friendlyName, cspName string) (pfxData []byte, err error) {
+func (enc *Encoder) Encode(privateKey interface{}, certificate *x509.Certificate, caCerts []*x509.Certificate, password string) (pfxData []byte, err error) {
+	return enc.EncodeWithAttributes(privateKey, certificate, caCerts, password, "", "")
+}
+
+// EncodeWithAttributes produces pfxData containing one private key (privateKey), an
+// end-entity certificate (certificate), any number of CA certificates
+// (caCerts), as well as supplementary attributes (friendlyName and cspName).
+//
+// The pfxData is encrypted and authenticated with keys derived from
+// the provided password.
+//
+// EncodeWithAttributes emulates the behavior of OpenSSL's PKCS12_create: it creates two
+// SafeContents: one that's encrypted with the certificate encryption algorithm
+// and contains the certificates, and another that is unencrypted and contains the
+// private key shrouded with the key encryption algorithm.  The private key bag and
+// the end-entity certificate bag have the LocalKeyId attribute set to the SHA-1
+// fingerprint of the end-entity certificate.
+func (enc *Encoder) EncodeWithAttributes(privateKey interface{}, certificate *x509.Certificate, caCerts []*x509.Certificate, password, friendlyName, cspName string) (pfxData []byte, err error) {
 	if enc.macAlgorithm == nil && enc.certAlgorithm == nil && enc.keyAlgorithm == nil && password != "" {
 		return nil, errors.New("password must be empty")
 	}
@@ -726,7 +743,7 @@ func (enc *Encoder) Encode(privateKey interface{}, certificate *x509.Certificate
 		keyBag.Value.Class = 2
 		keyBag.Value.Tag = 0
 		keyBag.Value.IsCompound = true
-		if keyBag.Value.Bytes, err = x509.MarshalPKCS8PrivateKey(privateKey); err != nil {
+		if keyBag.Value.Bytes, err = marshalPKCS8PrivateKey(certificate, privateKey); err != nil {
 			return nil, err
 		}
 	} else {
@@ -734,7 +751,7 @@ func (enc *Encoder) Encode(privateKey interface{}, certificate *x509.Certificate
 		keyBag.Value.Class = 2
 		keyBag.Value.Tag = 0
 		keyBag.Value.IsCompound = true
-		if keyBag.Value.Bytes, err = encodePkcs8ShroudedKeyBag(enc.rand, privateKey, enc.keyAlgorithm, encodedPassword, enc.encryptionIterations, enc.saltLen); err != nil {
+		if keyBag.Value.Bytes, err = encodePkcs8ShroudedKeyBag(enc.rand, certificate, privateKey, enc.keyAlgorithm, encodedPassword, enc.encryptionIterations, enc.saltLen); err != nil {
 			return nil, err
 		}
 	}

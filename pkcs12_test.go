@@ -187,7 +187,7 @@ func TestEncode(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	legacy, err := LegacyDES.WithRand(rand.Reader).Encode(rsaPk, cert, nil, "test", "myName", "Microsoft Software Key Storage Provider")
+	legacy, err := LegacyDES.WithRand(rand.Reader).EncodeWithAttributes(rsaPk, cert, nil, "test", "myName", "Microsoft Software Key Storage Provider")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -197,7 +197,7 @@ func TestEncode(t *testing.T) {
 		t.Fatal("wrong legacy p12 decoded")
 	}
 
-	legacy, err = LegacyRC2.WithRand(rand.Reader).Encode(rsaPk, cert, nil, "test", "myName", "Microsoft Software Key Storage Provider")
+	legacy, err = LegacyRC2.WithRand(rand.Reader).EncodeWithAttributes(rsaPk, cert, nil, "test", "myName", "Microsoft Software Key Storage Provider")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -207,7 +207,7 @@ func TestEncode(t *testing.T) {
 		t.Fatal("wrong legacy p12 decoded")
 	}
 
-	modern, err := Modern2023.WithRand(rand.Reader).Encode(rsaPk, cert, nil, "test", "myName", "Microsoft Software Key Storage Provider")
+	modern, err := Modern2023.WithRand(rand.Reader).EncodeWithAttributes(rsaPk, cert, nil, "test", "myName", "Microsoft Software Key Storage Provider")
 	if err != nil {
 		t.Fatal(err)
 	}
