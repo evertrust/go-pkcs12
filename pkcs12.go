@@ -18,6 +18,7 @@
 package pkcs12 // import "software.sslmate.com/src/go-pkcs12"
 
 import (
+	"crypto"
 	"crypto/ecdsa"
 	"crypto/rand"
 	"crypto/rsa"
@@ -29,6 +30,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"golang.org/x/crypto/ed25519"
 	"io"
 )
 
@@ -406,7 +408,8 @@ func Decode(pfxData []byte, password string) (privateKey interface{}, certificat
 
 // DecodeChain extracts a certificate, a CA certificate chain, and private key
 // from pfxData, which must be a DER-encoded PKCS#12 file. This function assumes that there is at least one certificate
-// and only one private key in the pfxData.  The first certificate is assumed to
+// and only one private key in the pfxData. certificate will be the value of the certificate matching the privateKey,
+// and if no match are successful, the first certificate is assumed to
 // be the leaf certificate, and subsequent certificates, if any, are assumed to
 // comprise the CA certificate chain.
 func DecodeChain(pfxData []byte, password string) (privateKey interface{}, certificate *x509.Certificate, caCerts []*x509.Certificate, err error) {
@@ -467,6 +470,24 @@ func DecodeChain(pfxData []byte, password string) (privateKey interface{}, certi
 	}
 	if privateKey == nil {
 		return nil, nil, nil, errors.New("pkcs12: private key missing")
+	}
+
+	// certificate value should be the one where the private key exists
+	for _, certInP12 := range caCerts {
+		match := false
+		switch casted := certInP12.PublicKey.(type) {
+		case *rsa.PublicKey:
+			match = casted.Equal(privateKey.(crypto.Signer).Public())
+		case *ecdsa.PublicKey:
+			match = casted.Equal(privateKey.(crypto.Signer).Public())
+		case ed25519.PublicKey:
+			match = casted.Equal(privateKey.(crypto.Signer).Public())
+		default:
+			// Do nothing, will not match
+		}
+		if match {
+			certificate = certInP12
+		}
 	}
 
 	return
