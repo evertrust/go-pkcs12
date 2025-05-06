@@ -40,6 +40,7 @@ const DefaultPassword = "changeit"
 
 // An Encoder contains methods for encoding PKCS#12 files.  This package
 // defines several different Encoders with different parameters.
+// An Encoder is safe for concurrent use by multiple goroutines.
 type Encoder struct {
 	macAlgorithm         asn1.ObjectIdentifier
 	certAlgorithm        asn1.ObjectIdentifier
@@ -350,10 +351,10 @@ func convertBag(bag *safeBag, password []byte) (*pem.Block, error) {
 				return nil, err
 			}
 		default:
-			return nil, errors.New("found unknown private key type in PKCS#8 wrapping")
+			return nil, errors.New("pkcs12: found unknown private key type in PKCS#8 wrapping")
 		}
 	default:
-		return nil, errors.New("don't know how to convert a safe bag of type " + bag.Id.String())
+		return nil, errors.New("pkcs12: don't know how to convert a safe bag of type " + bag.Id.String())
 	}
 	return block, nil
 }
@@ -694,7 +695,7 @@ func (enc *Encoder) Encode(privateKey interface{}, certificate *x509.Certificate
 // fingerprint of the end-entity certificate.
 func (enc *Encoder) EncodeWithAttributes(privateKey interface{}, certificate *x509.Certificate, caCerts []*x509.Certificate, password, friendlyName, cspName string) (pfxData []byte, err error) {
 	if enc.macAlgorithm == nil && enc.certAlgorithm == nil && enc.keyAlgorithm == nil && password != "" {
-		return nil, errors.New("password must be empty")
+		return nil, errors.New("pkcs12: password must be empty")
 	}
 
 	encodedPassword, err := bmpStringZeroTerminated(password)
@@ -921,7 +922,7 @@ func EncodeTrustStoreEntries(rand io.Reader, entries []TrustStoreEntry, password
 // encrypted and contains the certificates.
 func (enc *Encoder) EncodeTrustStoreEntries(entries []TrustStoreEntry, password string) (pfxData []byte, err error) {
 	if enc.macAlgorithm == nil && enc.certAlgorithm == nil && password != "" {
-		return nil, errors.New("password must be empty")
+		return nil, errors.New("pkcs12: password must be empty")
 	}
 
 	encodedPassword, err := bmpStringZeroTerminated(password)
