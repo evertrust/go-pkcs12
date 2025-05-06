@@ -493,6 +493,37 @@ func DecodeChain(pfxData []byte, password string) (privateKey interface{}, certi
 	return
 }
 
+// DecodeCerts extracts all certificate bags
+// from pfxData, which must be a DER-encoded PKCS#12 file. This function is able to handle multiple
+// certificates per bag, as well as multiple certificate bags
+func DecodeCerts(pfxData []byte, password string) (certificates []*x509.Certificate, err error) {
+	encodedPassword, err := bmpStringZeroTerminated(password)
+	if err != nil {
+		return nil, err
+	}
+
+	bags, encodedPassword, err := getSafeContents(pfxData, encodedPassword, 1, 2)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, bag := range bags {
+		if bag.Id.Equal(oidCertBag) {
+			certsData, err := decodeCertBag(bag.Value.Bytes)
+			if err != nil {
+				return nil, err
+			}
+			certs, err := x509.ParseCertificates(certsData)
+			if err != nil {
+				return nil, err
+			}
+			certificates = append(certificates, certs...)
+		}
+	}
+
+	return
+}
+
 // DecodeTrustStore extracts the certificates from pfxData, which must be a DER-encoded
 // PKCS#12 file containing exclusively certificates with attribute 2.16.840.1.113894.746875.1.1,
 // which is used by Java to designate a trust anchor.
