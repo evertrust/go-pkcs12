@@ -24,8 +24,7 @@ type attribute struct {
 }
 
 var (
-	oidPublicKeyRSA = asn1.ObjectIdentifier{1, 2, 840, 113549, 1, 1, 1}
-	oidKeyUsage     = asn1.ObjectIdentifier{2, 5, 29, 15}
+	oidKeyUsage = asn1.ObjectIdentifier{2, 5, 29, 15}
 )
 
 // Custom encoding function for RSA to handle key attributes

@@ -25,27 +25,27 @@ type certBag struct {
 	Data []byte `asn1:"tag:0,explicit"`
 }
 
-func decodePkcs8ShroudedKeyBag(asn1Data, password []byte) (privateKey interface{}, err error) {
+func decodePkcs8ShroudedKeyBag(asn1Data, password []byte) (privateKey, alternatePrivateKey any, err error) {
 	pkinfo := new(encryptedPrivateKeyInfo)
 	if err = unmarshal(asn1Data, pkinfo); err != nil {
-		return nil, errors.New("pkcs12: error decoding PKCS#8 shrouded key bag: " + err.Error())
+		return nil, nil, errors.New("pkcs12: error decoding PKCS#8 shrouded key bag: " + err.Error())
 	}
 
 	pkData, err := pbDecrypt(pkinfo, password)
 	if err != nil {
-		return nil, errors.New("pkcs12: error decrypting PKCS#8 shrouded key bag: " + err.Error())
+		return nil, nil, errors.New("pkcs12: error decrypting PKCS#8 shrouded key bag: " + err.Error())
 	}
 
 	ret := new(asn1.RawValue)
 	if err = unmarshal(pkData, ret); err != nil {
-		return nil, errors.New("pkcs12: error unmarshaling decrypted private key: " + err.Error())
+		return nil, nil, errors.New("pkcs12: error unmarshaling decrypted private key: " + err.Error())
 	}
 
-	if privateKey, err = x509.ParsePKCS8PrivateKey(pkData); err != nil {
-		return nil, errors.New("pkcs12: error parsing PKCS#8 private key: " + err.Error())
+	if privateKey, alternatePrivateKey, err = ParsePKCS8PrivateKey(pkData); err != nil {
+		return nil, nil, errors.New("pkcs12: error parsing PKCS#8 private key: " + err.Error())
 	}
 
-	return privateKey, nil
+	return privateKey, alternatePrivateKey, nil
 }
 
 func encodePkcs8ShroudedKeyBag(rand io.Reader, certificate *x509.Certificate, privateKey interface{}, algoID asn1.ObjectIdentifier, password []byte, iterations int, saltLen int) (asn1Data []byte, err error) {

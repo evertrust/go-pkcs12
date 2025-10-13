@@ -337,7 +337,8 @@ func convertBag(bag *safeBag, password []byte) (*pem.Block, error) {
 	case bag.Id.Equal(oidPKCS8ShroundedKeyBag):
 		block.Type = privateKeyType
 
-		key, err := decodePkcs8ShroudedKeyBag(bag.Value.Bytes, password)
+		// FIXME: encoding for composite
+		key, _, err := decodePkcs8ShroudedKeyBag(bag.Value.Bytes, password)
 		if err != nil {
 			return nil, err
 		}
@@ -398,9 +399,9 @@ func convertAttribute(attribute *pkcs12Attribute) (key, value string, err error)
 // assumes that there is only one certificate and only one private key in the
 // pfxData.  Since PKCS#12 files often contain more than one certificate, you
 // probably want to use [DecodeChain] instead.
-func Decode(pfxData []byte, password string) (privateKey interface{}, certificate *x509.Certificate, err error) {
+func Decode(pfxData []byte, password string) (privateKey any, alternatePrivateKey any, certificate *x509.Certificate, err error) {
 	var caCerts []*x509.Certificate
-	privateKey, certificate, caCerts, err = DecodeChain(pfxData, password)
+	privateKey, alternatePrivateKey, certificate, caCerts, err = DecodeChain(pfxData, password)
 	if len(caCerts) != 0 {
 		err = errors.New("pkcs12: expected exactly two safe bags in the PFX PDU")
 	}
@@ -413,15 +414,15 @@ func Decode(pfxData []byte, password string) (privateKey interface{}, certificat
 // and if no match are successful, the first certificate is assumed to
 // be the leaf certificate, and subsequent certificates, if any, are assumed to
 // comprise the CA certificate chain.
-func DecodeChain(pfxData []byte, password string) (privateKey interface{}, certificate *x509.Certificate, caCerts []*x509.Certificate, err error) {
+func DecodeChain(pfxData []byte, password string) (privateKey any, alternatePrivateKey any, certificate *x509.Certificate, caCerts []*x509.Certificate, err error) {
 	encodedPassword, err := bmpStringZeroTerminated(password)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 
 	bags, encodedPassword, err := getSafeContents(pfxData, encodedPassword, 1, 2)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 
 	for _, bag := range bags {
@@ -429,15 +430,15 @@ func DecodeChain(pfxData []byte, password string) (privateKey interface{}, certi
 		case bag.Id.Equal(oidCertBag):
 			certsData, err := decodeCertBag(bag.Value.Bytes)
 			if err != nil {
-				return nil, nil, nil, err
+				return nil, nil, nil, nil, err
 			}
 			certs, err := x509.ParseCertificates(certsData)
 			if err != nil {
-				return nil, nil, nil, err
+				return nil, nil, nil, nil, err
 			}
 			if len(certs) != 1 {
 				err = errors.New("pkcs12: expected exactly one certificate in the certBag")
-				return nil, nil, nil, err
+				return nil, nil, nil, nil, err
 			}
 			if certificate == nil {
 				certificate = certs[0]
@@ -448,29 +449,29 @@ func DecodeChain(pfxData []byte, password string) (privateKey interface{}, certi
 		case bag.Id.Equal(oidKeyBag):
 			if privateKey != nil {
 				err = errors.New("pkcs12: expected exactly one key bag")
-				return nil, nil, nil, err
+				return nil, nil, nil, nil, err
 			}
 
-			if privateKey, err = x509.ParsePKCS8PrivateKey(bag.Value.Bytes); err != nil {
-				return nil, nil, nil, err
+			if privateKey, alternatePrivateKey, err = ParsePKCS8PrivateKey(bag.Value.Bytes); err != nil {
+				return nil, nil, nil, nil, err
 			}
 		case bag.Id.Equal(oidPKCS8ShroundedKeyBag):
 			if privateKey != nil {
 				err = errors.New("pkcs12: expected exactly one key bag")
-				return nil, nil, nil, err
+				return nil, nil, nil, nil, err
 			}
 
-			if privateKey, err = decodePkcs8ShroudedKeyBag(bag.Value.Bytes, encodedPassword); err != nil {
-				return nil, nil, nil, err
+			if privateKey, alternatePrivateKey, err = decodePkcs8ShroudedKeyBag(bag.Value.Bytes, encodedPassword); err != nil {
+				return nil, nil, nil, nil, err
 			}
 		}
 	}
 
 	if certificate == nil {
-		return nil, nil, nil, errors.New("pkcs12: certificate missing")
+		return nil, nil, nil, nil, errors.New("pkcs12: certificate missing")
 	}
 	if privateKey == nil {
-		return nil, nil, nil, errors.New("pkcs12: private key missing")
+		return nil, nil, nil, nil, errors.New("pkcs12: private key missing")
 	}
 
 	// certificate value should be the one where the private key exists

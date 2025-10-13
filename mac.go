@@ -28,9 +28,7 @@ type digestInfo struct {
 }
 
 var (
-	oidSHA1   = asn1.ObjectIdentifier([]int{1, 3, 14, 3, 2, 26})
-	oidSHA256 = asn1.ObjectIdentifier([]int{2, 16, 840, 1, 101, 3, 4, 2, 1})
-	oidSHA512 = asn1.ObjectIdentifier([]int{2, 16, 840, 1, 101, 3, 4, 2, 3})
+	oidSHA1 = asn1.ObjectIdentifier([]int{1, 3, 14, 3, 2, 26})
 )
 
 func doMac(macData *macData, message, password []byte) ([]byte, error) {
