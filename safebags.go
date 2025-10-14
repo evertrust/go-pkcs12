@@ -9,6 +9,7 @@ import (
 	"crypto/x509"
 	"encoding/asn1"
 	"errors"
+	"github.com/EverTrust/go-pkcs12/pkg/x509_evt"
 	"io"
 )
 
@@ -41,7 +42,7 @@ func decodePkcs8ShroudedKeyBag(asn1Data, password []byte) (privateKey, alternate
 		return nil, nil, errors.New("pkcs12: error unmarshaling decrypted private key: " + err.Error())
 	}
 
-	if privateKey, alternatePrivateKey, err = ParsePKCS8PrivateKey(pkData); err != nil {
+	if privateKey, alternatePrivateKey, err = x509_evt.ParsePKCS8PrivateKey(pkData); err != nil {
 		return nil, nil, errors.New("pkcs12: error parsing PKCS#8 private key: " + err.Error())
 	}
 
@@ -50,7 +51,7 @@ func decodePkcs8ShroudedKeyBag(asn1Data, password []byte) (privateKey, alternate
 
 func encodePkcs8ShroudedKeyBag(rand io.Reader, certificate *x509.Certificate, privateKey interface{}, algoID asn1.ObjectIdentifier, password []byte, iterations int, saltLen int) (asn1Data []byte, err error) {
 	var pkData []byte
-	if pkData, err = marshalPKCS8PrivateKey(certificate, privateKey); err != nil {
+	if pkData, err = x509_evt.MarshalPKCS8PrivateKeyWithAttributes(certificate, privateKey); err != nil {
 		return nil, errors.New("pkcs12: error encoding PKCS#8 private key: " + err.Error())
 	}
 

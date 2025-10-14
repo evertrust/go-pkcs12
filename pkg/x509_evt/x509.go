@@ -1,10 +1,12 @@
-package pkcs12
+package x509_evt
 
 import (
 	"crypto"
+	"crypto/ecdh"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/asn1"
 	"errors"
 	"fmt"
@@ -14,6 +16,27 @@ import (
 	"golang.org/x/crypto/ed25519"
 	"math/big"
 )
+
+type tbsCertificateRequest struct {
+	Raw           asn1.RawContent
+	Version       int
+	Subject       asn1.RawValue
+	PublicKey     publicKeyInfo
+	RawAttributes []asn1.RawValue `asn1:"tag:0"`
+}
+
+type publicKeyInfo struct {
+	Raw       asn1.RawContent
+	Algorithm pkix.AlgorithmIdentifier
+	PublicKey asn1.BitString
+}
+
+type certificateRequest struct {
+	Raw                asn1.RawContent
+	TBSCSR             tbsCertificateRequest
+	SignatureAlgorithm pkix.AlgorithmIdentifier
+	SignatureValue     asn1.BitString
+}
 
 // RFC 3279, 2.3 Public Key Algorithms
 //
@@ -30,9 +53,10 @@ import (
 //	id-ecPublicKey OBJECT IDENTIFIER ::= {
 //		iso(1) member-body(2) us(840) ansi-X9-62(10045) keyType(2) 1 }
 var (
-	oidPublicKeyRSA   = asn1.ObjectIdentifier{1, 2, 840, 113549, 1, 1, 1}
-	oidPublicKeyDSA   = asn1.ObjectIdentifier{1, 2, 840, 10040, 4, 1}
-	oidPublicKeyECDSA = asn1.ObjectIdentifier{1, 2, 840, 10045, 2, 1}
+	oidPublicKeyRSA    = asn1.ObjectIdentifier{1, 2, 840, 113549, 1, 1, 1}
+	oidPublicKeyDSA    = asn1.ObjectIdentifier{1, 2, 840, 10040, 4, 1}
+	oidPublicKeyECDSA  = asn1.ObjectIdentifier{1, 2, 840, 10045, 2, 1}
+	oidPublicKeyX25519 = asn1.ObjectIdentifier{1, 3, 101, 110}
 	// FIXME: this is an arbitrary identifier, issued from one of the early drafts
 	oidPublicKeyComposite = asn1.ObjectIdentifier{2, 16, 840, 1, 114027, 80, 4, 1}
 	oidPublicKeyEd25519   = oidSignatureEd25519
@@ -110,9 +134,9 @@ var (
 	oidSignatureMLDSA65WithSHA512 = asn1.ObjectIdentifier{2, 16, 840, 1, 101, 3, 4, 3, 33}
 	oidSignatureMLDSA87WithSHA512 = asn1.ObjectIdentifier{2, 16, 840, 1, 101, 3, 4, 3, 34}
 
-	oidSHA256 = asn1.ObjectIdentifier{2, 16, 840, 1, 101, 3, 4, 2, 1}
-	oidSHA384 = asn1.ObjectIdentifier{2, 16, 840, 1, 101, 3, 4, 2, 2}
-	oidSHA512 = asn1.ObjectIdentifier{2, 16, 840, 1, 101, 3, 4, 2, 3}
+	OidSHA256 = asn1.ObjectIdentifier{2, 16, 840, 1, 101, 3, 4, 2, 1}
+	OidSHA384 = asn1.ObjectIdentifier{2, 16, 840, 1, 101, 3, 4, 2, 2}
+	OidSHA512 = asn1.ObjectIdentifier{2, 16, 840, 1, 101, 3, 4, 2, 3}
 
 	oidMGF1 = asn1.ObjectIdentifier{1, 2, 840, 113549, 1, 1, 8}
 
@@ -122,7 +146,7 @@ var (
 	oidISOSignatureSHA1WithRSA = asn1.ObjectIdentifier{1, 3, 14, 3, 2, 29}
 )
 
-func parsePkcs8(privKey pkcs8) (key, alternateKey any, err error) {
+func parsePkcs8(privKey pkcs8WithAttributes) (key, alternateKey any, err error) {
 	switch {
 	case privKey.Algo.Algorithm.Equal(oidPublicKeyRSA):
 		key, err = x509.ParsePKCS1PrivateKey(privKey.PrivateKey)
@@ -151,12 +175,22 @@ func parsePkcs8(privKey pkcs8) (key, alternateKey any, err error) {
 		if _, err := asn1.Unmarshal(privKey.PrivateKey, &curvePrivateKey); err != nil {
 			return nil, nil, fmt.Errorf("x509: invalid Ed25519 private key: %v", err)
 		}
-		if l := len(privKey.PrivateKey); l != ed25519.SeedSize {
+		if l := len(curvePrivateKey); l != ed25519.SeedSize {
 			return nil, nil, fmt.Errorf("x509: invalid Ed25519 private key length: %d", l)
 		}
 		return ed25519.NewKeyFromSeed(curvePrivateKey), nil, nil
+	case privKey.Algo.Algorithm.Equal(oidPublicKeyX25519):
+		if l := len(privKey.Algo.Parameters.FullBytes); l != 0 {
+			return nil, nil, errors.New("x509: invalid X25519 private key parameters")
+		}
+		var curvePrivateKey []byte
+		if _, err := asn1.Unmarshal(privKey.PrivateKey, &curvePrivateKey); err != nil {
+			return nil, nil, fmt.Errorf("x509: invalid X25519 private key: %v", err)
+		}
+		key, err = ecdh.X25519().NewPrivateKey(curvePrivateKey)
+		return key, nil, err
 	case privKey.Algo.Algorithm.Equal(oidPublicKeyComposite):
-		var compositeKeys []pkcs8
+		var compositeKeys []pkcs8WithAttributes
 
 		if _, err := asn1.Unmarshal(privKey.PrivateKey, &compositeKeys); err != nil {
 			return nil, nil, fmt.Errorf("x509: invalid composite private key: %v", err)
@@ -209,7 +243,7 @@ func parsePkcs8(privKey pkcs8) (key, alternateKey any, err error) {
 	}
 }
 
-func keyFromSeed(privKey pkcs8, seedSize int, alg string, keyFunc func([]byte) crypto.PrivateKey) (key, alternateKey any, err error) {
+func keyFromSeed(privKey pkcs8WithAttributes, seedSize int, alg string, keyFunc func([]byte) crypto.PrivateKey) (key, alternateKey any, err error) {
 	if l := len(privKey.Algo.Parameters.FullBytes); l != 0 {
 		return nil, nil, fmt.Errorf("x509: invalid %s private key parameters", alg)
 	}
@@ -220,7 +254,7 @@ func keyFromSeed(privKey pkcs8, seedSize int, alg string, keyFunc func([]byte) c
 }
 
 func ParsePKCS8PrivateKey(der []byte) (key, alternateKey any, err error) {
-	var privKey pkcs8
+	var privKey pkcs8WithAttributes
 	if _, err := asn1.Unmarshal(der, &privKey); err != nil {
 		if _, err := asn1.Unmarshal(der, &ecPrivateKey{}); err == nil {
 			return nil, nil, errors.New("x509: failed to parse private key (use ParseECPrivateKey instead for this key format)")
@@ -240,7 +274,7 @@ func ParsePKCS8PrivateKey(der []byte) (key, alternateKey any, err error) {
 func parseECPrivateKey(namedCurveOID *asn1.ObjectIdentifier, der []byte) (key *ecdsa.PrivateKey, err error) {
 	var privKey ecPrivateKey
 	if _, err := asn1.Unmarshal(der, &privKey); err != nil {
-		if _, err := asn1.Unmarshal(der, &pkcs8{}); err == nil {
+		if _, err := asn1.Unmarshal(der, &pkcs8WithAttributes{}); err == nil {
 			return nil, errors.New("x509: failed to parse private key (use ParsePKCS8PrivateKey instead for this key format)")
 		}
 		if _, err := asn1.Unmarshal(der, &pkcs1PrivateKey{}); err == nil {
@@ -326,4 +360,34 @@ func namedCurveFromOID(oid asn1.ObjectIdentifier) elliptic.Curve {
 		return elliptic.P521()
 	}
 	return nil
+}
+
+func oidFromNamedCurve(curve elliptic.Curve) (asn1.ObjectIdentifier, bool) {
+	switch curve {
+	case elliptic.P224():
+		return oidNamedCurveP224, true
+	case elliptic.P256():
+		return oidNamedCurveP256, true
+	case elliptic.P384():
+		return oidNamedCurveP384, true
+	case elliptic.P521():
+		return oidNamedCurveP521, true
+	}
+
+	return nil, false
+}
+
+func oidFromECDHCurve(curve ecdh.Curve) (asn1.ObjectIdentifier, bool) {
+	switch curve {
+	case ecdh.X25519():
+		return oidPublicKeyX25519, true
+	case ecdh.P256():
+		return oidNamedCurveP256, true
+	case ecdh.P384():
+		return oidNamedCurveP384, true
+	case ecdh.P521():
+		return oidNamedCurveP521, true
+	}
+
+	return nil, false
 }

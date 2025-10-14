@@ -12,6 +12,7 @@ import (
 	"crypto/sha512"
 	"crypto/x509/pkix"
 	"encoding/asn1"
+	"github.com/EverTrust/go-pkcs12/pkg/x509_evt"
 	"hash"
 )
 
@@ -38,10 +39,10 @@ func doMac(macData *macData, message, password []byte) ([]byte, error) {
 	case macData.Mac.Algorithm.Algorithm.Equal(oidSHA1):
 		hFn = sha1.New
 		key = pbkdf(sha1Sum, 20, 64, macData.MacSalt, password, macData.Iterations, 3, 20)
-	case macData.Mac.Algorithm.Algorithm.Equal(oidSHA256):
+	case macData.Mac.Algorithm.Algorithm.Equal(x509_evt.OidSHA256):
 		hFn = sha256.New
 		key = pbkdf(sha256Sum, 32, 64, macData.MacSalt, password, macData.Iterations, 3, 32)
-	case macData.Mac.Algorithm.Algorithm.Equal(oidSHA512):
+	case macData.Mac.Algorithm.Algorithm.Equal(x509_evt.OidSHA512):
 		hFn = sha512.New
 		key = pbkdf(sha512Sum, 64, 128, macData.MacSalt, password, macData.Iterations, 3, 64)
 	default:

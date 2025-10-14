@@ -1,4 +1,4 @@
-package pkcs12
+package x509_evt
 
 import "math/big"
 
@@ -23,4 +23,10 @@ type pkcs1AdditionalRSAPrime struct {
 	// We ignore these values because rsa will calculate them.
 	Exp   *big.Int
 	Coeff *big.Int
+}
+
+// pkcs1PublicKey reflects the ASN.1 structure of a PKCS #1 public key.
+type pkcs1PublicKey struct {
+	N *big.Int
+	E int
 }

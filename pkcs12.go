@@ -30,6 +30,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"github.com/EverTrust/go-pkcs12/pkg/x509_evt"
 	"golang.org/x/crypto/ed25519"
 	"io"
 )
@@ -158,7 +159,7 @@ var Passwordless = &Encoder{
 // but as https://neilmadden.blog/2023/01/09/on-pbkdf2-iterations/ explains, this doesn't
 // help as much as you think.
 var Modern2023 = &Encoder{
-	macAlgorithm:         oidSHA256,
+	macAlgorithm:         x509_evt.OidSHA256,
 	certAlgorithm:        oidPBES2,
 	keyAlgorithm:         oidPBES2,
 	macIterations:        2048,
@@ -452,7 +453,7 @@ func DecodeChain(pfxData []byte, password string) (privateKey any, alternatePriv
 				return nil, nil, nil, nil, err
 			}
 
-			if privateKey, alternatePrivateKey, err = ParsePKCS8PrivateKey(bag.Value.Bytes); err != nil {
+			if privateKey, alternatePrivateKey, err = x509_evt.ParsePKCS8PrivateKey(bag.Value.Bytes); err != nil {
 				return nil, nil, nil, nil, err
 			}
 		case bag.Id.Equal(oidPKCS8ShroundedKeyBag):
@@ -797,7 +798,7 @@ func (enc *Encoder) EncodeWithAttributes(privateKey interface{}, certificate *x5
 		keyBag.Value.Class = 2
 		keyBag.Value.Tag = 0
 		keyBag.Value.IsCompound = true
-		if keyBag.Value.Bytes, err = marshalPKCS8PrivateKey(certificate, privateKey); err != nil {
+		if keyBag.Value.Bytes, err = x509_evt.MarshalPKCS8PrivateKeyWithAttributes(certificate, privateKey); err != nil {
 			return nil, err
 		}
 	} else {
