@@ -1,6 +1,7 @@
 package x509_evt
 
 import (
+	"bytes"
 	"crypto/ecdh"
 	"crypto/ecdsa"
 	"crypto/elliptic"
@@ -358,4 +359,148 @@ func oidFromECDHCurve(curve ecdh.Curve) (asn1.ObjectIdentifier, bool) {
 	}
 
 	return nil, false
+}
+
+// getPublicKeyAlgorithmFromOID returns the exposed PublicKeyAlgorithm
+// identifier for public key types supported in certificates and CSRs. Marshal
+// and Parse functions may support a different set of public key types.
+func getPublicKeyAlgorithmFromOID(oid asn1.ObjectIdentifier) x509.PublicKeyAlgorithm {
+	switch {
+	case oid.Equal(oidPublicKeyRSA):
+		return x509.RSA
+	case oid.Equal(oidPublicKeyDSA):
+		return x509.DSA
+	case oid.Equal(oidPublicKeyECDSA):
+		return x509.ECDSA
+	case oid.Equal(oidPublicKeyEd25519):
+		return x509.Ed25519
+	case oid.Equal(oidSignatureMLDSA44):
+		return mldsa44PubAlgorithm
+	case oid.Equal(oidSignatureMLDSA65):
+		return mldsa65PubAlgorithm
+	case oid.Equal(oidSignatureMLDSA87):
+		return mldsa87PubAlgorithm
+	}
+	return x509.UnknownPublicKeyAlgorithm
+}
+
+var (
+	oidExtensionAuthorityInfoAccess = asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 1, 1}
+	oidAuthorityInfoAccessOcsp      = asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 48, 1}
+	oidAuthorityInfoAccessIssuers   = asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 48, 2}
+)
+
+// pssParameters reflects the parameters in an AlgorithmIdentifier that
+// specifies RSA PSS. See RFC 3447, Appendix A.2.3.
+type pssParameters struct {
+	// The following three fields are not marked as
+	// optional because the default values specify SHA-1,
+	// which is no longer suitable for use in signatures.
+	Hash         pkix.AlgorithmIdentifier `asn1:"explicit,tag:0"`
+	MGF          pkix.AlgorithmIdentifier `asn1:"explicit,tag:1"`
+	SaltLength   int                      `asn1:"explicit,tag:2"`
+	TrailerField int                      `asn1:"optional,explicit,tag:3,default:1"`
+}
+
+func getSignatureAlgorithmFromAI(ai pkix.AlgorithmIdentifier) x509.SignatureAlgorithm {
+	if ai.Algorithm.Equal(oidSignatureEd25519) {
+		// RFC 8410, Section 3
+		// > For all of the OIDs, the parameters MUST be absent.
+		if len(ai.Parameters.FullBytes) != 0 {
+			return x509.UnknownSignatureAlgorithm
+		}
+	}
+
+	if !ai.Algorithm.Equal(oidSignatureRSAPSS) {
+		for _, details := range signatureAlgorithmDetails {
+			if ai.Algorithm.Equal(details.oid) {
+				return details.algo
+			}
+		}
+		return x509.UnknownSignatureAlgorithm
+	}
+
+	// RSA PSS is special because it encodes important parameters
+	// in the Parameters.
+
+	var params pssParameters
+	if _, err := asn1.Unmarshal(ai.Parameters.FullBytes, &params); err != nil {
+		return x509.UnknownSignatureAlgorithm
+	}
+
+	var mgf1HashFunc pkix.AlgorithmIdentifier
+	if _, err := asn1.Unmarshal(params.MGF.Parameters.FullBytes, &mgf1HashFunc); err != nil {
+		return x509.UnknownSignatureAlgorithm
+	}
+
+	// PSS is greatly overburdened with options. This code forces them into
+	// three buckets by requiring that the MGF1 hash function always match the
+	// message hash function (as recommended in RFC 3447, Section 8.1), that the
+	// salt length matches the hash length, and that the trailer field has the
+	// default value.
+	if (len(params.Hash.Parameters.FullBytes) != 0 && !bytes.Equal(params.Hash.Parameters.FullBytes, asn1.NullBytes)) ||
+		!params.MGF.Algorithm.Equal(oidMGF1) ||
+		!mgf1HashFunc.Algorithm.Equal(params.Hash.Algorithm) ||
+		(len(mgf1HashFunc.Parameters.FullBytes) != 0 && !bytes.Equal(mgf1HashFunc.Parameters.FullBytes, asn1.NullBytes)) ||
+		params.TrailerField != 1 {
+		return x509.UnknownSignatureAlgorithm
+	}
+
+	switch {
+	case params.Hash.Algorithm.Equal(OidSHA256) && params.SaltLength == 32:
+		return x509.SHA256WithRSAPSS
+	case params.Hash.Algorithm.Equal(OidSHA384) && params.SaltLength == 48:
+		return x509.SHA384WithRSAPSS
+	case params.Hash.Algorithm.Equal(OidSHA512) && params.SaltLength == 64:
+		return x509.SHA512WithRSAPSS
+	}
+
+	return x509.UnknownSignatureAlgorithm
+}
+
+var (
+	oidExtKeyUsageAny                            = asn1.ObjectIdentifier{2, 5, 29, 37, 0}
+	oidExtKeyUsageServerAuth                     = asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 3, 1}
+	oidExtKeyUsageClientAuth                     = asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 3, 2}
+	oidExtKeyUsageCodeSigning                    = asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 3, 3}
+	oidExtKeyUsageEmailProtection                = asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 3, 4}
+	oidExtKeyUsageIPSECEndSystem                 = asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 3, 5}
+	oidExtKeyUsageIPSECTunnel                    = asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 3, 6}
+	oidExtKeyUsageIPSECUser                      = asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 3, 7}
+	oidExtKeyUsageTimeStamping                   = asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 3, 8}
+	oidExtKeyUsageOCSPSigning                    = asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 3, 9}
+	oidExtKeyUsageMicrosoftServerGatedCrypto     = asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 311, 10, 3, 3}
+	oidExtKeyUsageNetscapeServerGatedCrypto      = asn1.ObjectIdentifier{2, 16, 840, 1, 113730, 4, 1}
+	oidExtKeyUsageMicrosoftCommercialCodeSigning = asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 311, 2, 1, 22}
+	oidExtKeyUsageMicrosoftKernelCodeSigning     = asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 311, 61, 1, 1}
+)
+
+// extKeyUsageOIDs contains the mapping between an ExtKeyUsage and its OID.
+var extKeyUsageOIDs = []struct {
+	extKeyUsage x509.ExtKeyUsage
+	oid         asn1.ObjectIdentifier
+}{
+	{x509.ExtKeyUsageAny, oidExtKeyUsageAny},
+	{x509.ExtKeyUsageServerAuth, oidExtKeyUsageServerAuth},
+	{x509.ExtKeyUsageClientAuth, oidExtKeyUsageClientAuth},
+	{x509.ExtKeyUsageCodeSigning, oidExtKeyUsageCodeSigning},
+	{x509.ExtKeyUsageEmailProtection, oidExtKeyUsageEmailProtection},
+	{x509.ExtKeyUsageIPSECEndSystem, oidExtKeyUsageIPSECEndSystem},
+	{x509.ExtKeyUsageIPSECTunnel, oidExtKeyUsageIPSECTunnel},
+	{x509.ExtKeyUsageIPSECUser, oidExtKeyUsageIPSECUser},
+	{x509.ExtKeyUsageTimeStamping, oidExtKeyUsageTimeStamping},
+	{x509.ExtKeyUsageOCSPSigning, oidExtKeyUsageOCSPSigning},
+	{x509.ExtKeyUsageMicrosoftServerGatedCrypto, oidExtKeyUsageMicrosoftServerGatedCrypto},
+	{x509.ExtKeyUsageNetscapeServerGatedCrypto, oidExtKeyUsageNetscapeServerGatedCrypto},
+	{x509.ExtKeyUsageMicrosoftCommercialCodeSigning, oidExtKeyUsageMicrosoftCommercialCodeSigning},
+	{x509.ExtKeyUsageMicrosoftKernelCodeSigning, oidExtKeyUsageMicrosoftKernelCodeSigning},
+}
+
+func extKeyUsageFromOID(oid asn1.ObjectIdentifier) (eku x509.ExtKeyUsage, ok bool) {
+	for _, pair := range extKeyUsageOIDs {
+		if oid.Equal(pair.oid) {
+			return pair.extKeyUsage, true
+		}
+	}
+	return
 }

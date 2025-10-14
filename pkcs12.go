@@ -31,6 +31,9 @@ import (
 	"errors"
 	"fmt"
 	"github.com/EverTrust/go-pkcs12/pkg/x509_evt"
+	"github.com/cloudflare/circl/sign/mldsa/mldsa44"
+	"github.com/cloudflare/circl/sign/mldsa/mldsa65"
+	"github.com/cloudflare/circl/sign/mldsa/mldsa87"
 	"golang.org/x/crypto/ed25519"
 	"io"
 )
@@ -432,7 +435,7 @@ func DecodeChain(pfxData []byte, password string) (privateKey any, alternatePriv
 			if err != nil {
 				return nil, nil, nil, nil, err
 			}
-			certs, err := x509.ParseCertificates(certsData)
+			certs, err := x509_evt.ParseCertificates(certsData)
 			if err != nil {
 				return nil, nil, nil, nil, err
 			}
@@ -483,6 +486,12 @@ func DecodeChain(pfxData []byte, password string) (privateKey any, alternatePriv
 		case *ecdsa.PublicKey:
 			match = casted.Equal(privateKey.(crypto.Signer).Public())
 		case ed25519.PublicKey:
+			match = casted.Equal(privateKey.(crypto.Signer).Public())
+		case *mldsa44.PublicKey:
+			match = casted.Equal(privateKey.(crypto.Signer).Public())
+		case *mldsa65.PublicKey:
+			match = casted.Equal(privateKey.(crypto.Signer).Public())
+		case *mldsa87.PublicKey:
 			match = casted.Equal(privateKey.(crypto.Signer).Public())
 		default:
 			// Do nothing, will not match
