@@ -28,8 +28,6 @@ var (
 	oidExtensionRequest        = asn1.ObjectIdentifier{1, 2, 840, 113549, 1, 9, 14}
 )
 
-// FIXME: add tests for all x509 taken code
-
 func buildPublicKeyInfo(key crypto.Signer) (*publicKeyInfo, error) {
 	publicKeyBytes, publicKeyAlgorithm, err := marshalPublicKey(key.Public())
 	if err != nil {

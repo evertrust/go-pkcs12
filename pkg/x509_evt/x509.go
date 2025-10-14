@@ -1,7 +1,6 @@
 package x509_evt
 
 import (
-	"crypto"
 	"crypto/ecdh"
 	"crypto/ecdsa"
 	"crypto/elliptic"
@@ -10,9 +9,6 @@ import (
 	"encoding/asn1"
 	"errors"
 	"fmt"
-	"github.com/cloudflare/circl/sign/mldsa/mldsa44"
-	"github.com/cloudflare/circl/sign/mldsa/mldsa65"
-	"github.com/cloudflare/circl/sign/mldsa/mldsa87"
 	"golang.org/x/crypto/ed25519"
 	"math/big"
 )
@@ -212,45 +208,17 @@ func parsePkcs8(privKey pkcs8WithAttributes) (key, alternateKey any, err error) 
 
 		return key, alternateKey, nil
 	case privKey.Algo.Algorithm.Equal(oidSignatureMLDSA44):
-		return keyFromSeed(privKey, mldsa44.SeedSize, "MLDSA44", func(bytes []byte) crypto.PrivateKey {
-			var seed [mldsa44.SeedSize]byte
-
-			copy(seed[:], bytes)
-
-			_, privateKey := mldsa44.NewKeyFromSeed(&seed)
-			return privateKey
-		})
+		mldsa, err := mldsa44FromBytes(privKey.PrivateKey)
+		return mldsa, nil, err
 	case privKey.Algo.Algorithm.Equal(oidSignatureMLDSA65):
-		return keyFromSeed(privKey, mldsa65.SeedSize, "MLDSA65", func(bytes []byte) crypto.PrivateKey {
-			var seed [mldsa65.SeedSize]byte
-
-			copy(seed[:], bytes)
-
-			_, privateKey := mldsa65.NewKeyFromSeed(&seed)
-			return privateKey
-		})
+		mldsa, err := mldsa65FromBytes(privKey.PrivateKey)
+		return mldsa, nil, err
 	case privKey.Algo.Algorithm.Equal(oidSignatureMLDSA87):
-		return keyFromSeed(privKey, mldsa87.SeedSize, "MLDSA87", func(bytes []byte) crypto.PrivateKey {
-			var seed [mldsa87.SeedSize]byte
-
-			copy(seed[:], bytes)
-
-			_, privateKey := mldsa87.NewKeyFromSeed(&seed)
-			return privateKey
-		})
+		mldsa, err := mldsa87FromBytes(privKey.PrivateKey)
+		return mldsa, nil, err
 	default:
 		return nil, nil, fmt.Errorf("x509: PKCS#8 wrapping contained private key with unknown algorithm: %v", privKey.Algo.Algorithm)
 	}
-}
-
-func keyFromSeed(privKey pkcs8WithAttributes, seedSize int, alg string, keyFunc func([]byte) crypto.PrivateKey) (key, alternateKey any, err error) {
-	if l := len(privKey.Algo.Parameters.FullBytes); l != 0 {
-		return nil, nil, fmt.Errorf("x509: invalid %s private key parameters", alg)
-	}
-	if l := len(privKey.PrivateKey); l != seedSize {
-		return nil, nil, fmt.Errorf("x509: invalid %s private key length: %d", alg, l)
-	}
-	return keyFunc(privKey.PrivateKey), nil, nil
 }
 
 func ParsePKCS8PrivateKey(der []byte) (key, alternateKey any, err error) {

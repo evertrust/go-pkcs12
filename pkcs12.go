@@ -338,7 +338,6 @@ func convertBag(bag *safeBag, password []byte) (*pem.Block, error) {
 	case bag.Id.Equal(oidPKCS8ShroundedKeyBag):
 		block.Type = privateKeyType
 
-		// FIXME: encoding for composite
 		key, _, err := decodePkcs8ShroudedKeyBag(bag.Value.Bytes, password)
 		if err != nil {
 			return nil, err

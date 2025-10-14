@@ -10,9 +10,6 @@ import (
 	"encoding/asn1"
 	"errors"
 	"fmt"
-	"github.com/cloudflare/circl/sign/mldsa/mldsa44"
-	"github.com/cloudflare/circl/sign/mldsa/mldsa65"
-	"github.com/cloudflare/circl/sign/mldsa/mldsa87"
 )
 
 // pkcs8WithAttributes reflects an ASN.1, PKCS #8 PrivateKey. See
@@ -178,34 +175,34 @@ func MarshalPKCS8PrivateKey(key any) ([]byte, error) {
 			}
 		}
 
-	case *mldsa44.PrivateKey:
+	case *MLDSA44:
 		privKey.Algo = pkix.AlgorithmIdentifier{
 			Algorithm: oidSignatureMLDSA44,
 		}
 
-		curvePrivateKey, err := asn1.Marshal(k.Bytes())
+		curvePrivateKey, err := toAsn1(k)
 		if err != nil {
 			return nil, fmt.Errorf("x509: failed to marshal private key: %v", err)
 		}
 		privKey.PrivateKey = curvePrivateKey
 
-	case *mldsa65.PrivateKey:
+	case *MLDSA65:
 		privKey.Algo = pkix.AlgorithmIdentifier{
 			Algorithm: oidSignatureMLDSA65,
 		}
 
-		curvePrivateKey, err := asn1.Marshal(k.Bytes())
+		curvePrivateKey, err := toAsn1(k)
 		if err != nil {
 			return nil, fmt.Errorf("x509: failed to marshal private key: %v", err)
 		}
 		privKey.PrivateKey = curvePrivateKey
 
-	case *mldsa87.PrivateKey:
+	case *MLDSA87:
 		privKey.Algo = pkix.AlgorithmIdentifier{
 			Algorithm: oidSignatureMLDSA87,
 		}
 
-		curvePrivateKey, err := asn1.Marshal(k.Bytes())
+		curvePrivateKey, err := toAsn1(k)
 		if err != nil {
 			return nil, fmt.Errorf("x509: failed to marshal private key: %v", err)
 		}
