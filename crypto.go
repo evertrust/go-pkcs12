@@ -226,14 +226,14 @@ func pbes2CipherFor(algorithm pkix.AlgorithmIdentifier, password []byte) (cipher
 	switch {
 	case kdfParams.Prf.Algorithm.Equal(oidHmacWithSHA256):
 		prf = sha256.New
+	case kdfParams.Prf.Algorithm.Equal(oidHmacWithSHA384):
+		prf = sha512.New384
 	case kdfParams.Prf.Algorithm.Equal(oidHmacWithSHA512):
 		prf = sha512.New
 	case kdfParams.Prf.Algorithm.Equal(oidHmacWithSHA1):
 		prf = sha1.New
 	case kdfParams.Prf.Algorithm.Equal(asn1.ObjectIdentifier([]int{})):
 		prf = sha1.New
-	case kdfParams.Prf.Algorithm.Equal(oidHmacWithSHA384):
-		prf = sha512.New384
 	default:
 		return nil, nil, NotImplementedError("pbes2 prf " + kdfParams.Prf.Algorithm.String() + " is not supported")
 	}
