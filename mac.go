@@ -31,6 +31,7 @@ var (
 	oidSHA1   = asn1.ObjectIdentifier([]int{1, 3, 14, 3, 2, 26})
 	oidSHA256 = asn1.ObjectIdentifier([]int{2, 16, 840, 1, 101, 3, 4, 2, 1})
 	oidSHA512 = asn1.ObjectIdentifier([]int{2, 16, 840, 1, 101, 3, 4, 2, 3})
+	oidSHA384 = asn1.ObjectIdentifier([]int{2, 16, 840, 1, 101, 3, 4, 2, 2})
 )
 
 func doMac(macData *macData, message, password []byte) ([]byte, error) {
@@ -46,6 +47,9 @@ func doMac(macData *macData, message, password []byte) ([]byte, error) {
 	case macData.Mac.Algorithm.Algorithm.Equal(oidSHA512):
 		hFn = sha512.New
 		key = pbkdf(sha512Sum, 64, 128, macData.MacSalt, password, macData.Iterations, 3, 64)
+	case macData.Mac.Algorithm.Algorithm.Equal(oidSHA384):
+		hFn = sha512.New384
+		key = pbkdf(sha512_384Sum, 48, 128, macData.MacSalt, password, macData.Iterations, 3, 48)
 	default:
 		return nil, NotImplementedError("MAC digest algorithm not supported: " + macData.Mac.Algorithm.Algorithm.String())
 	}

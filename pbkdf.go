@@ -34,6 +34,11 @@ func sha512Sum(in []byte) []byte {
 	return sum[:]
 }
 
+func sha512_384Sum(in []byte) []byte {
+	sum := sha512.Sum384(in)
+	return sum[:]
+}
+
 // fillWithRepeats returns v*ceiling(len(pattern) / v) bytes consisting of
 // repeats of pattern.
 func fillWithRepeats(pattern []byte, v int) []byte {
