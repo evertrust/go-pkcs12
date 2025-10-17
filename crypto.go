@@ -31,6 +31,7 @@ var (
 	oidPBKDF2                        = asn1.ObjectIdentifier([]int{1, 2, 840, 113549, 1, 5, 12})
 	oidHmacWithSHA1                  = asn1.ObjectIdentifier([]int{1, 2, 840, 113549, 2, 7})
 	oidHmacWithSHA256                = asn1.ObjectIdentifier([]int{1, 2, 840, 113549, 2, 9})
+	oidHmacWithSHA384                = asn1.ObjectIdentifier([]int{1, 2, 840, 113549, 2, 10})
 	oidHmacWithSHA512                = asn1.ObjectIdentifier([]int{1, 2, 840, 113549, 2, 11})
 	oidAES128CBC                     = asn1.ObjectIdentifier([]int{2, 16, 840, 1, 101, 3, 4, 1, 2})
 	oidAES192CBC                     = asn1.ObjectIdentifier([]int{2, 16, 840, 1, 101, 3, 4, 1, 22})
@@ -225,6 +226,8 @@ func pbes2CipherFor(algorithm pkix.AlgorithmIdentifier, password []byte) (cipher
 	switch {
 	case kdfParams.Prf.Algorithm.Equal(oidHmacWithSHA256):
 		prf = sha256.New
+	case kdfParams.Prf.Algorithm.Equal(oidHmacWithSHA384):
+		prf = sha512.New384
 	case kdfParams.Prf.Algorithm.Equal(oidHmacWithSHA512):
 		prf = sha512.New
 	case kdfParams.Prf.Algorithm.Equal(oidHmacWithSHA1):
