@@ -2,6 +2,7 @@ package x509_evt
 
 import (
 	"crypto"
+	"crypto/ecdh"
 	"crypto/ecdsa"
 	"crypto/ed25519"
 	"crypto/elliptic"
@@ -11,6 +12,9 @@ import (
 	"encoding/asn1"
 	"errors"
 	"fmt"
+	"github.com/cloudflare/circl/kem/mlkem/mlkem1024"
+	"github.com/cloudflare/circl/kem/mlkem/mlkem512"
+	"github.com/cloudflare/circl/kem/mlkem/mlkem768"
 	"github.com/cloudflare/circl/sign/mldsa/mldsa44"
 	"github.com/cloudflare/circl/sign/mldsa/mldsa65"
 	"github.com/cloudflare/circl/sign/mldsa/mldsa87"
@@ -28,7 +32,7 @@ var (
 	oidExtensionRequest        = asn1.ObjectIdentifier{1, 2, 840, 113549, 1, 9, 14}
 )
 
-func buildPublicKeyInfo(key crypto.Signer) (*publicKeyInfo, error) {
+func buildPublicKeyInfo(key hasPublicKey) (*publicKeyInfo, error) {
 	publicKeyBytes, publicKeyAlgorithm, err := marshalPublicKey(key.Public())
 	if err != nil {
 		return nil, err
@@ -148,9 +152,9 @@ func buildAttributes(template *x509.CertificateRequest, extensions []pkix.Extens
 }
 
 func CreateCertificateRequest(rand io.Reader, template *x509.CertificateRequest, primaryKey, alternateKey crypto.PrivateKey) (csr []byte, err error) {
-	key, ok := primaryKey.(crypto.Signer)
+	canPublicKey, ok := primaryKey.(hasPublicKey)
 	if !ok {
-		return nil, errors.New("x509: certificate private key does not implement crypto.Signer")
+		return nil, errors.New("x509: certificate private key does not implement Public")
 	}
 
 	var altKey *crypto.Signer
@@ -163,7 +167,7 @@ func CreateCertificateRequest(rand io.Reader, template *x509.CertificateRequest,
 		altKey = &alt
 	}
 
-	signatureAlgorithm, algorithmIdentifier, err := signingParamsForKey(key, template.SignatureAlgorithm)
+	signatureAlgorithm, algorithmIdentifier, err := signingParamsForKey(canPublicKey, template.SignatureAlgorithm)
 	if err != nil {
 		return nil, err
 	}
@@ -209,7 +213,7 @@ func CreateCertificateRequest(rand io.Reader, template *x509.CertificateRequest,
 		sigAttrs = append(sigAttrs, altSignatureAlgorithmExt, altPublicKeyInfoExt)
 	}
 
-	primaryPublicKeyInfo, err := buildPublicKeyInfo(key)
+	primaryPublicKeyInfo, err := buildPublicKeyInfo(canPublicKey)
 	if err != nil {
 		return nil, err
 	}
@@ -285,16 +289,20 @@ func CreateCertificateRequest(rand io.Reader, template *x509.CertificateRequest,
 	}
 	tbsCSR2.Raw = tbsCSRContents2
 
-	signature, err := signTBS(tbsCSRContents2, key, signatureAlgorithm, rand)
-	if err != nil {
-		return nil, err
-	}
-
-	return asn1.Marshal(certificateRequest{
+	csrObj := certificateRequest{
 		TBSCSR:             tbsCSR2,
 		SignatureAlgorithm: algorithmIdentifier,
-		SignatureValue:     asn1.BitString{Bytes: signature, BitLength: len(signature) * 8},
-	})
+	}
+
+	if signingKey, ok := primaryKey.(crypto.Signer); ok {
+		signature, err := signTBS(tbsCSRContents2, signingKey, signatureAlgorithm, rand)
+		if err != nil {
+			return nil, err
+		}
+		csrObj.SignatureValue = asn1.BitString{Bytes: signature, BitLength: len(signature) * 8}
+	}
+
+	return asn1.Marshal(csrObj)
 }
 
 func asRaw(content []byte) (raw asn1.RawValue, err error) {
@@ -543,12 +551,14 @@ func buildCSRExtensions(template *x509.CertificateRequest) ([]pkix.Extension, er
 var emptyRawValue = asn1.RawValue{}
 
 const (
-	mldsa44SigAlgorithm = x509.SignatureAlgorithm(17)
-	mldsa65SigAlgorithm = x509.SignatureAlgorithm(18)
-	mldsa87SigAlgorithm = x509.SignatureAlgorithm(19)
-	mldsa44PubAlgorithm = x509.PublicKeyAlgorithm(5)
-	mldsa65PubAlgorithm = x509.PublicKeyAlgorithm(6)
-	mldsa87PubAlgorithm = x509.PublicKeyAlgorithm(7)
+	mldsa44SigAlgorithm     = x509.SignatureAlgorithm(17)
+	mldsa65SigAlgorithm     = x509.SignatureAlgorithm(18)
+	mldsa87SigAlgorithm     = x509.SignatureAlgorithm(19)
+	noSignatureSigAlgorithm = x509.SignatureAlgorithm(20)
+	mldsa44PubAlgorithm     = x509.PublicKeyAlgorithm(5)
+	mldsa65PubAlgorithm     = x509.PublicKeyAlgorithm(6)
+	mldsa87PubAlgorithm     = x509.PublicKeyAlgorithm(7)
+	noSignaturePubAlgorithm = x509.PublicKeyAlgorithm(8)
 )
 
 var (
@@ -584,14 +594,23 @@ var signatureAlgorithmDetails = []struct {
 	{mldsa44SigAlgorithm, "MLDSA-44", oidSignatureMLDSA44, emptyRawValue, mldsa44PubAlgorithm, crypto.Hash(0) /* no pre-hashing */, false},
 	{mldsa65SigAlgorithm, "MLDSA-65", oidSignatureMLDSA65, emptyRawValue, mldsa65PubAlgorithm, crypto.Hash(0) /* no pre-hashing */, false},
 	{mldsa87SigAlgorithm, "MLDSA-87", oidSignatureMLDSA87, emptyRawValue, mldsa87PubAlgorithm, crypto.Hash(0) /* no pre-hashing */, false},
+	{mldsa87SigAlgorithm, "MLDSA-87", oidSignatureMLDSA87, emptyRawValue, mldsa87PubAlgorithm, crypto.Hash(0) /* no pre-hashing */, false},
+	{noSignatureSigAlgorithm, "SIG-EMPTY", oidSignatureNoSignature, emptyRawValue, noSignaturePubAlgorithm, crypto.Hash(0) /* no pre-hashing */, false},
 }
 
-func signingParamsForKey(key crypto.Signer, sigAlgo x509.SignatureAlgorithm) (x509.SignatureAlgorithm, pkix.AlgorithmIdentifier, error) {
+type hasPublicKey interface {
+	Public() crypto.PublicKey
+}
+
+func signingParamsForKey(key hasPublicKey, sigAlgo x509.SignatureAlgorithm) (x509.SignatureAlgorithm, pkix.AlgorithmIdentifier, error) {
 	var ai pkix.AlgorithmIdentifier
 	var pubType x509.PublicKeyAlgorithm
 	var defaultAlgo x509.SignatureAlgorithm
 
 	switch pub := key.Public().(type) {
+	case *ecdh.PublicKey, *mlkem512.PublicKey, *mlkem768.PublicKey, *mlkem1024.PublicKey:
+		pubType = noSignaturePubAlgorithm
+		defaultAlgo = noSignatureSigAlgorithm
 	case *rsa.PublicKey:
 		pubType = x509.RSA
 		defaultAlgo = x509.SHA256WithRSA
@@ -691,6 +710,21 @@ func marshalPublicKey(pub any) (publicKeyBytes []byte, publicKeyAlgorithm pkix.A
 	case *mldsa87.PublicKey:
 		publicKeyBytes = pub.Bytes()
 		publicKeyAlgorithm.Algorithm = oidSignatureMLDSA87
+	case *ecdh.PublicKey:
+		publicKeyBytes = pub.Bytes()
+		publicKeyAlgorithm.Algorithm = oidPublicKeyX25519
+	case *mlkem512.PublicKey:
+		// err is always nil
+		publicKeyBytes, _ = pub.MarshalBinary()
+		publicKeyAlgorithm.Algorithm = oidPublicKeyMLKEM512
+	case *mlkem768.PublicKey:
+		// err is always nil
+		publicKeyBytes, _ = pub.MarshalBinary()
+		publicKeyAlgorithm.Algorithm = oidPublicKeyMLKEM768
+	case *mlkem1024.PublicKey:
+		// err is always nil
+		publicKeyBytes, _ = pub.MarshalBinary()
+		publicKeyAlgorithm.Algorithm = oidPublicKeyMLKEM1024
 	default:
 		return nil, pkix.AlgorithmIdentifier{}, fmt.Errorf("x509: unsupported public key type: %T", pub)
 	}

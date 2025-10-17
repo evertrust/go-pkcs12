@@ -57,6 +57,10 @@ var (
 	// FIXME: this is an arbitrary identifier, issued from one of the early drafts
 	oidPublicKeyComposite = asn1.ObjectIdentifier{2, 16, 840, 1, 114027, 80, 4, 1}
 	oidPublicKeyEd25519   = oidSignatureEd25519
+
+	oidPublicKeyMLKEM512  = asn1.ObjectIdentifier{2, 16, 840, 1, 101, 3, 4, 4, 1}
+	oidPublicKeyMLKEM768  = asn1.ObjectIdentifier{2, 16, 840, 1, 101, 3, 4, 4, 2}
+	oidPublicKeyMLKEM1024 = asn1.ObjectIdentifier{2, 16, 840, 1, 101, 3, 4, 4, 3}
 )
 
 // OIDs for signature algorithms
@@ -130,10 +134,7 @@ var (
 	oidSignatureMLDSA44WithSHA512 = asn1.ObjectIdentifier{2, 16, 840, 1, 101, 3, 4, 3, 32}
 	oidSignatureMLDSA65WithSHA512 = asn1.ObjectIdentifier{2, 16, 840, 1, 101, 3, 4, 3, 33}
 	oidSignatureMLDSA87WithSHA512 = asn1.ObjectIdentifier{2, 16, 840, 1, 101, 3, 4, 3, 34}
-
-	OidSHA256 = asn1.ObjectIdentifier{2, 16, 840, 1, 101, 3, 4, 2, 1}
-	OidSHA384 = asn1.ObjectIdentifier{2, 16, 840, 1, 101, 3, 4, 2, 2}
-	OidSHA512 = asn1.ObjectIdentifier{2, 16, 840, 1, 101, 3, 4, 2, 3}
+	oidSignatureNoSignature       = asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 6, 2}
 
 	oidMGF1 = asn1.ObjectIdentifier{1, 2, 840, 113549, 1, 1, 8}
 
@@ -141,6 +142,12 @@ var (
 	// but it's specified by ISO. Microsoft's makecert.exe has been known
 	// to produce certificates with this OID.
 	oidISOSignatureSHA1WithRSA = asn1.ObjectIdentifier{1, 3, 14, 3, 2, 29}
+)
+
+var (
+	OidSHA256 = asn1.ObjectIdentifier{2, 16, 840, 1, 101, 3, 4, 2, 1}
+	OidSHA384 = asn1.ObjectIdentifier{2, 16, 840, 1, 101, 3, 4, 2, 2}
+	OidSHA512 = asn1.ObjectIdentifier{2, 16, 840, 1, 101, 3, 4, 2, 3}
 )
 
 func parsePkcs8(privKey pkcs8WithAttributes) (key, alternateKey any, err error) {
@@ -186,6 +193,15 @@ func parsePkcs8(privKey pkcs8WithAttributes) (key, alternateKey any, err error) 
 		}
 		key, err = ecdh.X25519().NewPrivateKey(curvePrivateKey)
 		return key, nil, err
+	case privKey.Algo.Algorithm.Equal(oidPublicKeyMLKEM512):
+		mlkem, err := mlkem512FromBytes(privKey.PrivateKey)
+		return mlkem, nil, err
+	case privKey.Algo.Algorithm.Equal(oidPublicKeyMLKEM768):
+		mlkem, err := mlkem768FromBytes(privKey.PrivateKey)
+		return mlkem, nil, err
+	case privKey.Algo.Algorithm.Equal(oidPublicKeyMLKEM1024):
+		mlkem, err := mlkem1024FromBytes(privKey.PrivateKey)
+		return mlkem, nil, err
 	case privKey.Algo.Algorithm.Equal(oidPublicKeyComposite):
 		var compositeKeys []pkcs8WithAttributes
 

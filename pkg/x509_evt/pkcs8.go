@@ -208,6 +208,39 @@ func MarshalPKCS8PrivateKey(key any) ([]byte, error) {
 		}
 		privKey.PrivateKey = curvePrivateKey
 
+	case *MLKEM512:
+		privKey.Algo = pkix.AlgorithmIdentifier{
+			Algorithm: oidPublicKeyMLKEM512,
+		}
+
+		curvePrivateKey, err := toAsn1(k)
+		if err != nil {
+			return nil, fmt.Errorf("x509: failed to marshal private key: %v", err)
+		}
+		privKey.PrivateKey = curvePrivateKey
+
+	case *MLKEM768:
+		privKey.Algo = pkix.AlgorithmIdentifier{
+			Algorithm: oidPublicKeyMLKEM768,
+		}
+
+		curvePrivateKey, err := toAsn1(k)
+		if err != nil {
+			return nil, fmt.Errorf("x509: failed to marshal private key: %v", err)
+		}
+		privKey.PrivateKey = curvePrivateKey
+
+	case *MLKEM1024:
+		privKey.Algo = pkix.AlgorithmIdentifier{
+			Algorithm: oidPublicKeyMLKEM1024,
+		}
+
+		curvePrivateKey, err := toAsn1(k)
+		if err != nil {
+			return nil, fmt.Errorf("x509: failed to marshal private key: %v", err)
+		}
+		privKey.PrivateKey = curvePrivateKey
+
 	default:
 		return nil, fmt.Errorf("x509: unknown key type while marshaling PKCS#8: %T", key)
 	}

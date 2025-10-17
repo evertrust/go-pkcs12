@@ -2,8 +2,6 @@ package x509_evt
 
 import (
 	cryptoRand "crypto/rand"
-	"encoding/asn1"
-	"errors"
 	"fmt"
 	"github.com/cloudflare/circl/sign/mldsa/mldsa44"
 	"github.com/cloudflare/circl/sign/mldsa/mldsa65"
@@ -12,55 +10,9 @@ import (
 )
 
 // MLDSA needs wrapping to save the seed and the format it was created as
-
-type mldsaFormat int
-
-const (
-	mldsaSeedOnly mldsaFormat = iota
-	mldsaSeedExpanded
-)
-
-type mldsaKey interface {
-	seed() []byte
-	format() mldsaFormat
-	expanded() []byte
-}
-
-func toAsn1(m mldsaKey) ([]byte, error) {
-	switch m.format() {
-	case mldsaSeedOnly:
-		return m.seed(), nil
-	case mldsaSeedExpanded:
-		attributes := [][]byte{m.seed(), m.expanded()}
-
-		return asn1.Marshal(attributes)
-	}
-	return nil, errors.New("unsupported MLDSA format when marshalling")
-}
-
-func mldsaSeedAndFormat(privateKeyBytes []byte, alg string) ([]byte, mldsaFormat, error) {
-	// Two formats can occur for MLDSA: https://datatracker.ietf.org/doc/html/draft-ietf-lamps-dilithium-certificates-13#name-asn1-module
-
-	var asSeq [][]byte
-
-	seed := privateKeyBytes
-	format := mldsaSeedOnly
-
-	_, err := asn1.Unmarshal(seed, &asSeq)
-	if err == nil {
-		if l := len(asSeq); l < 2 {
-			return nil, 0, fmt.Errorf("x509: invalid %s private key sequence length: %d", alg, l)
-		}
-		seed = asSeq[0]
-		format = mldsaSeedExpanded
-	}
-
-	return seed, format, nil
-}
-
 type MLDSA44 struct {
 	cachedSeed   []byte
-	exportFormat mldsaFormat
+	exportFormat seededKeyFormat
 	pk           *mldsa44.PublicKey
 	*mldsa44.PrivateKey
 }
@@ -68,7 +20,7 @@ type MLDSA44 struct {
 func mldsa44FromBytes(privateKeyBytes []byte) (*MLDSA44, error) {
 	alg := "MLDSA-44"
 
-	seed, format, err := mldsaSeedAndFormat(privateKeyBytes, alg)
+	seed, format, err := seededKeySeedAndFormat(privateKeyBytes, alg)
 	if err != nil {
 		return nil, err
 	}
@@ -95,7 +47,7 @@ func (m *MLDSA44) seed() []byte {
 	return m.cachedSeed
 }
 
-func (m *MLDSA44) format() mldsaFormat {
+func (m *MLDSA44) format() seededKeyFormat {
 	return m.exportFormat
 }
 
@@ -116,7 +68,7 @@ func GenerateMLDSA44Key(rand io.Reader) (*MLDSA44, error) {
 
 	return &MLDSA44{
 		cachedSeed:   seed[:],
-		exportFormat: mldsaSeedExpanded,
+		exportFormat: seededKeySeedExpanded,
 		pk:           pk,
 		PrivateKey:   sk,
 	}, nil
@@ -124,7 +76,7 @@ func GenerateMLDSA44Key(rand io.Reader) (*MLDSA44, error) {
 
 type MLDSA65 struct {
 	cachedSeed   []byte
-	exportFormat mldsaFormat
+	exportFormat seededKeyFormat
 	pk           *mldsa65.PublicKey
 	*mldsa65.PrivateKey
 }
@@ -132,7 +84,7 @@ type MLDSA65 struct {
 func mldsa65FromBytes(privateKeyBytes []byte) (*MLDSA65, error) {
 	alg := "MLDSA-65"
 
-	seed, format, err := mldsaSeedAndFormat(privateKeyBytes, alg)
+	seed, format, err := seededKeySeedAndFormat(privateKeyBytes, alg)
 	if err != nil {
 		return nil, err
 	}
@@ -159,7 +111,7 @@ func (m *MLDSA65) seed() []byte {
 	return m.cachedSeed
 }
 
-func (m *MLDSA65) format() mldsaFormat {
+func (m *MLDSA65) format() seededKeyFormat {
 	return m.exportFormat
 }
 
@@ -180,7 +132,7 @@ func GenerateMLDSA65Key(rand io.Reader) (*MLDSA65, error) {
 
 	return &MLDSA65{
 		cachedSeed:   seed[:],
-		exportFormat: mldsaSeedExpanded,
+		exportFormat: seededKeySeedExpanded,
 		pk:           pk,
 		PrivateKey:   sk,
 	}, nil
@@ -189,14 +141,14 @@ func GenerateMLDSA65Key(rand io.Reader) (*MLDSA65, error) {
 type MLDSA87 struct {
 	*mldsa87.PrivateKey
 	cachedSeed   []byte
-	exportFormat mldsaFormat
+	exportFormat seededKeyFormat
 	pk           *mldsa87.PublicKey
 }
 
 func mldsa87FromBytes(privateKeyBytes []byte) (*MLDSA87, error) {
 	alg := "MLDSA-87"
 
-	seed, format, err := mldsaSeedAndFormat(privateKeyBytes, alg)
+	seed, format, err := seededKeySeedAndFormat(privateKeyBytes, alg)
 	if err != nil {
 		return nil, err
 	}
@@ -223,7 +175,7 @@ func (m *MLDSA87) seed() []byte {
 	return m.cachedSeed
 }
 
-func (m *MLDSA87) format() mldsaFormat {
+func (m *MLDSA87) format() seededKeyFormat {
 	return m.exportFormat
 }
 
@@ -244,7 +196,7 @@ func GenerateMLDSA87Key(rand io.Reader) (*MLDSA87, error) {
 
 	return &MLDSA87{
 		cachedSeed:   seed[:],
-		exportFormat: mldsaSeedExpanded,
+		exportFormat: seededKeySeedExpanded,
 		pk:           pk,
 		PrivateKey:   sk,
 	}, nil
