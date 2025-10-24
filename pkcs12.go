@@ -34,6 +34,7 @@ import (
 	"github.com/cloudflare/circl/sign/mldsa/mldsa44"
 	"github.com/cloudflare/circl/sign/mldsa/mldsa65"
 	"github.com/cloudflare/circl/sign/mldsa/mldsa87"
+	"github.com/cloudflare/circl/sign/slhdsa"
 	"golang.org/x/crypto/ed25519"
 	"io"
 )
@@ -492,6 +493,8 @@ func DecodeChain(pfxData []byte, password string) (privateKey any, alternatePriv
 		case *mldsa65.PublicKey:
 			match = casted.Equal(privateKey.(crypto.Signer).Public())
 		case *mldsa87.PublicKey:
+			match = casted.Equal(privateKey.(crypto.Signer).Public())
+		case slhdsa.PublicKey:
 			match = casted.Equal(privateKey.(crypto.Signer).Public())
 		default:
 			// Do nothing, will not match

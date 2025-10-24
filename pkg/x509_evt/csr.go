@@ -18,6 +18,7 @@ import (
 	"github.com/cloudflare/circl/sign/mldsa/mldsa44"
 	"github.com/cloudflare/circl/sign/mldsa/mldsa65"
 	"github.com/cloudflare/circl/sign/mldsa/mldsa87"
+	"github.com/cloudflare/circl/sign/slhdsa"
 	"io"
 	"net"
 	"net/url"
@@ -376,7 +377,22 @@ func checkSignature(algo x509.SignatureAlgorithm, signed, signature []byte, publ
 	switch hashType {
 	case crypto.Hash(0):
 		switch pubKeyAlgo {
-		case x509.Ed25519, mldsa44PubAlgorithm, mldsa65PubAlgorithm, mldsa87PubAlgorithm:
+		case x509.Ed25519,
+			mldsa44PubAlgorithm,
+			mldsa65PubAlgorithm,
+			mldsa87PubAlgorithm,
+			slhdsa128sPubAlgorithm,
+			slhdsa128fPubAlgorithm,
+			slhdsa192sPubAlgorithm,
+			slhdsa192fPubAlgorithm,
+			slhdsa256sPubAlgorithm,
+			slhdsa256fPubAlgorithm,
+			slhdsa128sShakePubAlgorithm,
+			slhdsa128fShakePubAlgorithm,
+			slhdsa192sShakePubAlgorithm,
+			slhdsa192fShakePubAlgorithm,
+			slhdsa256sShakePubAlgorithm,
+			slhdsa256fShakePubAlgorithm:
 			break
 		default:
 			return x509.ErrUnsupportedAlgorithm
@@ -424,6 +440,11 @@ func checkSignature(algo x509.SignatureAlgorithm, signed, signature []byte, publ
 	case *mldsa87.PublicKey:
 		if !mldsa87.Verify(pub, signed, nil, signature) {
 			return errors.New("x509: MLDSA-87 verification failure")
+		}
+		return
+	case slhdsa.PublicKey:
+		if !pub.Scheme().Verify(pub, signed, signature, nil) {
+			return errors.New("x509: SLH-DSA verification failure")
 		}
 		return
 	}
@@ -551,14 +572,38 @@ func buildCSRExtensions(template *x509.CertificateRequest) ([]pkix.Extension, er
 var emptyRawValue = asn1.RawValue{}
 
 const (
-	mldsa44SigAlgorithm     = x509.SignatureAlgorithm(17)
-	mldsa65SigAlgorithm     = x509.SignatureAlgorithm(18)
-	mldsa87SigAlgorithm     = x509.SignatureAlgorithm(19)
-	noSignatureSigAlgorithm = x509.SignatureAlgorithm(20)
-	mldsa44PubAlgorithm     = x509.PublicKeyAlgorithm(5)
-	mldsa65PubAlgorithm     = x509.PublicKeyAlgorithm(6)
-	mldsa87PubAlgorithm     = x509.PublicKeyAlgorithm(7)
-	noSignaturePubAlgorithm = x509.PublicKeyAlgorithm(8)
+	noSignatureSigAlgorithm     = x509.SignatureAlgorithm(17)
+	mldsa44SigAlgorithm         = x509.SignatureAlgorithm(18)
+	mldsa65SigAlgorithm         = x509.SignatureAlgorithm(19)
+	mldsa87SigAlgorithm         = x509.SignatureAlgorithm(20)
+	slhdsa128sSigAlgorithm      = x509.SignatureAlgorithm(21)
+	slhdsa128fSigAlgorithm      = x509.SignatureAlgorithm(22)
+	slhdsa192sSigAlgorithm      = x509.SignatureAlgorithm(23)
+	slhdsa192fSigAlgorithm      = x509.SignatureAlgorithm(24)
+	slhdsa256sSigAlgorithm      = x509.SignatureAlgorithm(25)
+	slhdsa256fSigAlgorithm      = x509.SignatureAlgorithm(26)
+	slhdsa128sShakeSigAlgorithm = x509.SignatureAlgorithm(27)
+	slhdsa128fShakeSigAlgorithm = x509.SignatureAlgorithm(28)
+	slhdsa192sShakeSigAlgorithm = x509.SignatureAlgorithm(29)
+	slhdsa192fShakeSigAlgorithm = x509.SignatureAlgorithm(30)
+	slhdsa256sShakeSigAlgorithm = x509.SignatureAlgorithm(31)
+	slhdsa256fShakeSigAlgorithm = x509.SignatureAlgorithm(32)
+	noSignaturePubAlgorithm     = x509.PublicKeyAlgorithm(5)
+	mldsa44PubAlgorithm         = x509.PublicKeyAlgorithm(6)
+	mldsa65PubAlgorithm         = x509.PublicKeyAlgorithm(7)
+	mldsa87PubAlgorithm         = x509.PublicKeyAlgorithm(8)
+	slhdsa128sPubAlgorithm      = x509.PublicKeyAlgorithm(9)
+	slhdsa128fPubAlgorithm      = x509.PublicKeyAlgorithm(10)
+	slhdsa192sPubAlgorithm      = x509.PublicKeyAlgorithm(11)
+	slhdsa192fPubAlgorithm      = x509.PublicKeyAlgorithm(12)
+	slhdsa256sPubAlgorithm      = x509.PublicKeyAlgorithm(13)
+	slhdsa256fPubAlgorithm      = x509.PublicKeyAlgorithm(14)
+	slhdsa128sShakePubAlgorithm = x509.PublicKeyAlgorithm(15)
+	slhdsa128fShakePubAlgorithm = x509.PublicKeyAlgorithm(16)
+	slhdsa192sShakePubAlgorithm = x509.PublicKeyAlgorithm(17)
+	slhdsa192fShakePubAlgorithm = x509.PublicKeyAlgorithm(18)
+	slhdsa256sShakePubAlgorithm = x509.PublicKeyAlgorithm(19)
+	slhdsa256fShakePubAlgorithm = x509.PublicKeyAlgorithm(20)
 )
 
 var (
@@ -595,6 +640,18 @@ var signatureAlgorithmDetails = []struct {
 	{mldsa65SigAlgorithm, "MLDSA-65", oidSignatureMLDSA65, emptyRawValue, mldsa65PubAlgorithm, crypto.Hash(0) /* no pre-hashing */, false},
 	{mldsa87SigAlgorithm, "MLDSA-87", oidSignatureMLDSA87, emptyRawValue, mldsa87PubAlgorithm, crypto.Hash(0) /* no pre-hashing */, false},
 	{mldsa87SigAlgorithm, "MLDSA-87", oidSignatureMLDSA87, emptyRawValue, mldsa87PubAlgorithm, crypto.Hash(0) /* no pre-hashing */, false},
+	{slhdsa128sSigAlgorithm, "SLH-DSA-128s", oidSignatureSLHDSA128s, emptyRawValue, slhdsa128sPubAlgorithm, crypto.Hash(0) /* no pre-hashing */, false},
+	{slhdsa128fSigAlgorithm, "SLH-DSA-128f", oidSignatureSLHDSA128f, emptyRawValue, slhdsa128fPubAlgorithm, crypto.Hash(0) /* no pre-hashing */, false},
+	{slhdsa192sSigAlgorithm, "SLH-DSA-192s", oidSignatureSLHDSA192s, emptyRawValue, slhdsa192sPubAlgorithm, crypto.Hash(0) /* no pre-hashing */, false},
+	{slhdsa192fSigAlgorithm, "SLH-DSA-192f", oidSignatureSLHDSA192f, emptyRawValue, slhdsa192fPubAlgorithm, crypto.Hash(0) /* no pre-hashing */, false},
+	{slhdsa256sSigAlgorithm, "SLH-DSA-256s", oidSignatureSLHDSA256s, emptyRawValue, slhdsa256sPubAlgorithm, crypto.Hash(0) /* no pre-hashing */, false},
+	{slhdsa256fSigAlgorithm, "SLH-DSA-256f", oidSignatureSLHDSA256f, emptyRawValue, slhdsa256fPubAlgorithm, crypto.Hash(0) /* no pre-hashing */, false},
+	{slhdsa128sShakeSigAlgorithm, "SLH-DSA-128s-SHAKE", oidSignatureSLHDSAShake128s, emptyRawValue, slhdsa128sShakePubAlgorithm, crypto.Hash(0) /* no pre-hashing */, false},
+	{slhdsa128fShakeSigAlgorithm, "SLH-DSA-128f-SHAKE", oidSignatureSLHDSAShake128f, emptyRawValue, slhdsa128fShakePubAlgorithm, crypto.Hash(0) /* no pre-hashing */, false},
+	{slhdsa192sShakeSigAlgorithm, "SLH-DSA-192s-SHAKE", oidSignatureSLHDSAShake192s, emptyRawValue, slhdsa192sShakePubAlgorithm, crypto.Hash(0) /* no pre-hashing */, false},
+	{slhdsa192fShakeSigAlgorithm, "SLH-DSA-192f-SHAKE", oidSignatureSLHDSAShake192f, emptyRawValue, slhdsa192fShakePubAlgorithm, crypto.Hash(0) /* no pre-hashing */, false},
+	{slhdsa256sShakeSigAlgorithm, "SLH-DSA-256s-SHAKE", oidSignatureSLHDSAShake256s, emptyRawValue, slhdsa256sShakePubAlgorithm, crypto.Hash(0) /* no pre-hashing */, false},
+	{slhdsa256fShakeSigAlgorithm, "SLH-DSA-256f-SHAKE", oidSignatureSLHDSAShake256f, emptyRawValue, slhdsa256fShakePubAlgorithm, crypto.Hash(0) /* no pre-hashing */, false},
 	{noSignatureSigAlgorithm, "SIG-EMPTY", oidSignatureNoSignature, emptyRawValue, noSignaturePubAlgorithm, crypto.Hash(0) /* no pre-hashing */, false},
 }
 
@@ -641,8 +698,18 @@ func signingParamsForKey(key hasPublicKey, sigAlgo x509.SignatureAlgorithm) (x50
 	case *mldsa87.PublicKey:
 		pubType = mldsa87PubAlgorithm
 		defaultAlgo = mldsa87SigAlgorithm
+	case slhdsa.PublicKey:
+		var err error
+		pubType, err = slhdsaIdToPubAlgorithm(pub.ID)
+		if err != nil {
+			return 0, ai, err
+		}
+		defaultAlgo, err = slhdsaIdToSigAlgorithm(pub.ID)
+		if err != nil {
+			return 0, ai, err
+		}
 	default:
-		return 0, ai, errors.New("x509: only RSA, ECDSA, Ed25519 and MLDSA keys supported")
+		return 0, ai, errors.New("x509: only RSA, ECDSA, Ed25519, MLDSA and SLHDSA keys supported")
 	}
 
 	if sigAlgo == 0 {
@@ -725,9 +792,114 @@ func marshalPublicKey(pub any) (publicKeyBytes []byte, publicKeyAlgorithm pkix.A
 		// err is always nil
 		publicKeyBytes, _ = pub.MarshalBinary()
 		publicKeyAlgorithm.Algorithm = oidPublicKeyMLKEM1024
+	case slhdsa.PublicKey:
+		publicKeyBytes, _ = pub.MarshalBinary()
+		oid, err := slhdsaIdToOid(pub.ID)
+		if err != nil {
+			return nil, pkix.AlgorithmIdentifier{}, err
+		}
+		publicKeyAlgorithm.Algorithm = oid
 	default:
 		return nil, pkix.AlgorithmIdentifier{}, fmt.Errorf("x509: unsupported public key type: %T", pub)
 	}
 
 	return publicKeyBytes, publicKeyAlgorithm, nil
+}
+
+func slhdsaIdToOid(id slhdsa.ID) (asn1.ObjectIdentifier, error) {
+	var oid asn1.ObjectIdentifier
+	switch id {
+	case slhdsa.SHA2_128s:
+		oid = oidSignatureSLHDSA128s
+	case slhdsa.SHA2_128f:
+		oid = oidSignatureSLHDSA128f
+	case slhdsa.SHA2_192s:
+		oid = oidSignatureSLHDSA192s
+	case slhdsa.SHA2_192f:
+		oid = oidSignatureSLHDSA192f
+	case slhdsa.SHA2_256s:
+		oid = oidSignatureSLHDSA256s
+	case slhdsa.SHA2_256f:
+		oid = oidSignatureSLHDSA256f
+	case slhdsa.SHAKE_128s:
+		oid = oidSignatureSLHDSAShake128s
+	case slhdsa.SHAKE_128f:
+		oid = oidSignatureSLHDSAShake128f
+	case slhdsa.SHAKE_192s:
+		oid = oidSignatureSLHDSAShake192s
+	case slhdsa.SHAKE_192f:
+		oid = oidSignatureSLHDSAShake192f
+	case slhdsa.SHAKE_256s:
+		oid = oidSignatureSLHDSAShake256s
+	case slhdsa.SHAKE_256f:
+		oid = oidSignatureSLHDSAShake256f
+	default:
+		return nil, errors.New("unsupported slhdsa.ID")
+	}
+	return oid, nil
+}
+
+func slhdsaIdToPubAlgorithm(id slhdsa.ID) (x509.PublicKeyAlgorithm, error) {
+	var alg x509.PublicKeyAlgorithm
+	switch id {
+	case slhdsa.SHA2_128s:
+		alg = slhdsa128sPubAlgorithm
+	case slhdsa.SHA2_128f:
+		alg = slhdsa128fPubAlgorithm
+	case slhdsa.SHA2_192s:
+		alg = slhdsa192sPubAlgorithm
+	case slhdsa.SHA2_192f:
+		alg = slhdsa192fPubAlgorithm
+	case slhdsa.SHA2_256s:
+		alg = slhdsa256sPubAlgorithm
+	case slhdsa.SHA2_256f:
+		alg = slhdsa256fPubAlgorithm
+	case slhdsa.SHAKE_128s:
+		alg = slhdsa128sShakePubAlgorithm
+	case slhdsa.SHAKE_128f:
+		alg = slhdsa128fShakePubAlgorithm
+	case slhdsa.SHAKE_192s:
+		alg = slhdsa192sShakePubAlgorithm
+	case slhdsa.SHAKE_192f:
+		alg = slhdsa192fShakePubAlgorithm
+	case slhdsa.SHAKE_256s:
+		alg = slhdsa256sShakePubAlgorithm
+	case slhdsa.SHAKE_256f:
+		alg = slhdsa256fShakePubAlgorithm
+	default:
+		return x509.UnknownPublicKeyAlgorithm, errors.New("unsupported slhdsa.ID")
+	}
+	return alg, nil
+}
+func slhdsaIdToSigAlgorithm(id slhdsa.ID) (x509.SignatureAlgorithm, error) {
+	var alg x509.SignatureAlgorithm
+	switch id {
+	case slhdsa.SHA2_128s:
+		alg = slhdsa128sSigAlgorithm
+	case slhdsa.SHA2_128f:
+		alg = slhdsa128fSigAlgorithm
+	case slhdsa.SHA2_192s:
+		alg = slhdsa192sSigAlgorithm
+	case slhdsa.SHA2_192f:
+		alg = slhdsa192fSigAlgorithm
+	case slhdsa.SHA2_256s:
+		alg = slhdsa256sSigAlgorithm
+	case slhdsa.SHA2_256f:
+		alg = slhdsa256fSigAlgorithm
+	case slhdsa.SHAKE_128s:
+		alg = slhdsa128sShakeSigAlgorithm
+	case slhdsa.SHAKE_128f:
+		alg = slhdsa128fShakeSigAlgorithm
+	case slhdsa.SHAKE_192s:
+		alg = slhdsa192sShakeSigAlgorithm
+	case slhdsa.SHAKE_192f:
+		alg = slhdsa192fShakeSigAlgorithm
+	case slhdsa.SHAKE_256s:
+		alg = slhdsa256sShakeSigAlgorithm
+	case slhdsa.SHAKE_256f:
+		alg = slhdsa256fShakeSigAlgorithm
+	default:
+		return x509.UnknownSignatureAlgorithm, errors.New("unsupported slhdsa.ID")
+	}
+	return alg, nil
 }

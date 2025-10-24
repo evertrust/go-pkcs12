@@ -10,6 +10,7 @@ import (
 	"encoding/asn1"
 	"errors"
 	"fmt"
+	"github.com/cloudflare/circl/sign/slhdsa"
 )
 
 // pkcs8WithAttributes reflects an ASN.1, PKCS #8 PrivateKey. See
@@ -240,6 +241,20 @@ func MarshalPKCS8PrivateKey(key any) ([]byte, error) {
 			return nil, fmt.Errorf("x509: failed to marshal private key: %v", err)
 		}
 		privKey.PrivateKey = curvePrivateKey
+
+	case slhdsa.PrivateKey:
+		sigOid, err := slhdsaIdToOid(k.ID)
+		if err != nil {
+			return nil, err
+		}
+		privKey.Algo = pkix.AlgorithmIdentifier{
+			Algorithm: sigOid,
+		}
+
+		privKey.PrivateKey, err = k.MarshalBinary()
+		if err != nil {
+			return nil, fmt.Errorf("x509: failed to marshal private key: %v", err)
+		}
 
 	default:
 		return nil, fmt.Errorf("x509: unknown key type while marshaling PKCS#8: %T", key)

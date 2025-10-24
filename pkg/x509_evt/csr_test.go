@@ -6,6 +6,8 @@ import (
 	"crypto/rand"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/pem"
+	"github.com/cloudflare/circl/sign/slhdsa"
 	"io"
 	"reflect"
 	"testing"
@@ -66,6 +68,102 @@ func TestKeyGen(t *testing.T) {
 			},
 			keyType: reflect.TypeOf(&MLDSA87{}),
 		},
+		{
+			name: "SLH DSA 128s",
+			keyGenFunc: func(reader io.Reader) (crypto.PrivateKey, error) {
+				_, pk, err := slhdsa.SHA2_128s.Scheme().GenerateKey()
+				return pk, err
+			},
+			keyType: reflect.TypeOf(slhdsa.PrivateKey{}),
+		},
+		{
+			name: "SLH DSA 128f",
+			keyGenFunc: func(reader io.Reader) (crypto.PrivateKey, error) {
+				_, pk, err := slhdsa.SHA2_128f.Scheme().GenerateKey()
+				return pk, err
+			},
+			keyType: reflect.TypeOf(slhdsa.PrivateKey{}),
+		},
+		{
+			name: "SLH DSA 192s",
+			keyGenFunc: func(reader io.Reader) (crypto.PrivateKey, error) {
+				_, pk, err := slhdsa.SHA2_192s.Scheme().GenerateKey()
+				return pk, err
+			},
+			keyType: reflect.TypeOf(slhdsa.PrivateKey{}),
+		},
+		{
+			name: "SLH DSA 192f",
+			keyGenFunc: func(reader io.Reader) (crypto.PrivateKey, error) {
+				_, pk, err := slhdsa.SHA2_192f.Scheme().GenerateKey()
+				return pk, err
+			},
+			keyType: reflect.TypeOf(slhdsa.PrivateKey{}),
+		},
+		{
+			name: "SLH DSA 256s",
+			keyGenFunc: func(reader io.Reader) (crypto.PrivateKey, error) {
+				_, pk, err := slhdsa.SHA2_256s.Scheme().GenerateKey()
+				return pk, err
+			},
+			keyType: reflect.TypeOf(slhdsa.PrivateKey{}),
+		},
+		{
+			name: "SLH DSA 256f",
+			keyGenFunc: func(reader io.Reader) (crypto.PrivateKey, error) {
+				_, pk, err := slhdsa.SHA2_256f.Scheme().GenerateKey()
+				return pk, err
+			},
+			keyType: reflect.TypeOf(slhdsa.PrivateKey{}),
+		},
+		{
+			name: "SLH DSA SHAKE 128s",
+			keyGenFunc: func(reader io.Reader) (crypto.PrivateKey, error) {
+				_, pk, err := slhdsa.SHAKE_128s.Scheme().GenerateKey()
+				return pk, err
+			},
+			keyType: reflect.TypeOf(slhdsa.PrivateKey{}),
+		},
+		{
+			name: "SLH DSA SHAKE 128f",
+			keyGenFunc: func(reader io.Reader) (crypto.PrivateKey, error) {
+				_, pk, err := slhdsa.SHAKE_128f.Scheme().GenerateKey()
+				return pk, err
+			},
+			keyType: reflect.TypeOf(slhdsa.PrivateKey{}),
+		},
+		{
+			name: "SLH DSA SHAKE 192s",
+			keyGenFunc: func(reader io.Reader) (crypto.PrivateKey, error) {
+				_, pk, err := slhdsa.SHAKE_192s.Scheme().GenerateKey()
+				return pk, err
+			},
+			keyType: reflect.TypeOf(slhdsa.PrivateKey{}),
+		},
+		{
+			name: "SLH DSA SHAKE 192f",
+			keyGenFunc: func(reader io.Reader) (crypto.PrivateKey, error) {
+				_, pk, err := slhdsa.SHAKE_192f.Scheme().GenerateKey()
+				return pk, err
+			},
+			keyType: reflect.TypeOf(slhdsa.PrivateKey{}),
+		},
+		{
+			name: "SLH DSA SHAKE 256s",
+			keyGenFunc: func(reader io.Reader) (crypto.PrivateKey, error) {
+				_, pk, err := slhdsa.SHAKE_256s.Scheme().GenerateKey()
+				return pk, err
+			},
+			keyType: reflect.TypeOf(slhdsa.PrivateKey{}),
+		},
+		{
+			name: "SLH DSA SHAKE 256f",
+			keyGenFunc: func(reader io.Reader) (crypto.PrivateKey, error) {
+				_, pk, err := slhdsa.SHAKE_256f.Scheme().GenerateKey()
+				return pk, err
+			},
+			keyType: reflect.TypeOf(slhdsa.PrivateKey{}),
+		},
 	}
 
 	for _, tt := range testCases {
@@ -94,6 +192,8 @@ func TestKeyGen(t *testing.T) {
 			if parsedCsr.Subject.CommonName != "test" {
 				t.Fatalf("invalid CSR contents: %s", parsedCsr.Subject.CommonName)
 			}
+
+			t.Log(string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: parsedCsr.Raw})))
 		})
 	}
 }

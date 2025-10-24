@@ -10,6 +10,7 @@ import (
 	"encoding/asn1"
 	"errors"
 	"fmt"
+	"github.com/cloudflare/circl/sign/slhdsa"
 	"golang.org/x/crypto/ed25519"
 	"math/big"
 )
@@ -61,6 +62,7 @@ var (
 	oidPublicKeyMLKEM512  = asn1.ObjectIdentifier{2, 16, 840, 1, 101, 3, 4, 4, 1}
 	oidPublicKeyMLKEM768  = asn1.ObjectIdentifier{2, 16, 840, 1, 101, 3, 4, 4, 2}
 	oidPublicKeyMLKEM1024 = asn1.ObjectIdentifier{2, 16, 840, 1, 101, 3, 4, 4, 3}
+	oidPublicKeySLHDSA    = asn1.ObjectIdentifier{2, 16, 840, 1, 101, 3, 4, 4, 3}
 )
 
 // OIDs for signature algorithms
@@ -131,10 +133,23 @@ var (
 	oidSignatureMLDSA44           = asn1.ObjectIdentifier{2, 16, 840, 1, 101, 3, 4, 3, 17}
 	oidSignatureMLDSA65           = asn1.ObjectIdentifier{2, 16, 840, 1, 101, 3, 4, 3, 18}
 	oidSignatureMLDSA87           = asn1.ObjectIdentifier{2, 16, 840, 1, 101, 3, 4, 3, 19}
+	oidSignatureSLHDSA128s        = asn1.ObjectIdentifier{2, 16, 840, 1, 101, 3, 4, 3, 20}
+	oidSignatureSLHDSA128f        = asn1.ObjectIdentifier{2, 16, 840, 1, 101, 3, 4, 3, 21}
+	oidSignatureSLHDSA192s        = asn1.ObjectIdentifier{2, 16, 840, 1, 101, 3, 4, 3, 22}
+	oidSignatureSLHDSA192f        = asn1.ObjectIdentifier{2, 16, 840, 1, 101, 3, 4, 3, 23}
+	oidSignatureSLHDSA256s        = asn1.ObjectIdentifier{2, 16, 840, 1, 101, 3, 4, 3, 24}
+	oidSignatureSLHDSA256f        = asn1.ObjectIdentifier{2, 16, 840, 1, 101, 3, 4, 3, 25}
+	oidSignatureSLHDSAShake128s   = asn1.ObjectIdentifier{2, 16, 840, 1, 101, 3, 4, 3, 26}
+	oidSignatureSLHDSAShake128f   = asn1.ObjectIdentifier{2, 16, 840, 1, 101, 3, 4, 3, 27}
+	oidSignatureSLHDSAShake192s   = asn1.ObjectIdentifier{2, 16, 840, 1, 101, 3, 4, 3, 28}
+	oidSignatureSLHDSAShake192f   = asn1.ObjectIdentifier{2, 16, 840, 1, 101, 3, 4, 3, 29}
+	oidSignatureSLHDSAShake256s   = asn1.ObjectIdentifier{2, 16, 840, 1, 101, 3, 4, 3, 30}
+	oidSignatureSLHDSAShake256f   = asn1.ObjectIdentifier{2, 16, 840, 1, 101, 3, 4, 3, 31}
 	oidSignatureMLDSA44WithSHA512 = asn1.ObjectIdentifier{2, 16, 840, 1, 101, 3, 4, 3, 32}
 	oidSignatureMLDSA65WithSHA512 = asn1.ObjectIdentifier{2, 16, 840, 1, 101, 3, 4, 3, 33}
 	oidSignatureMLDSA87WithSHA512 = asn1.ObjectIdentifier{2, 16, 840, 1, 101, 3, 4, 3, 34}
-	oidSignatureNoSignature       = asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 6, 2}
+
+	oidSignatureNoSignature = asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 6, 2}
 
 	oidMGF1 = asn1.ObjectIdentifier{1, 2, 840, 113549, 1, 1, 8}
 
@@ -233,6 +248,42 @@ func parsePkcs8(privKey pkcs8WithAttributes) (key, alternateKey any, err error) 
 	case privKey.Algo.Algorithm.Equal(oidSignatureMLDSA87):
 		mldsa, err := mldsa87FromBytes(privKey.PrivateKey)
 		return mldsa, nil, err
+	case privKey.Algo.Algorithm.Equal(oidSignatureSLHDSA128s):
+		pk, err := slhdsa.SHA2_128s.Scheme().UnmarshalBinaryPrivateKey(privKey.PrivateKey)
+		return pk, nil, err
+	case privKey.Algo.Algorithm.Equal(oidSignatureSLHDSA128f):
+		pk, err := slhdsa.SHA2_128f.Scheme().UnmarshalBinaryPrivateKey(privKey.PrivateKey)
+		return pk, nil, err
+	case privKey.Algo.Algorithm.Equal(oidSignatureSLHDSA192s):
+		pk, err := slhdsa.SHA2_192s.Scheme().UnmarshalBinaryPrivateKey(privKey.PrivateKey)
+		return pk, nil, err
+	case privKey.Algo.Algorithm.Equal(oidSignatureSLHDSA192f):
+		pk, err := slhdsa.SHA2_192f.Scheme().UnmarshalBinaryPrivateKey(privKey.PrivateKey)
+		return pk, nil, err
+	case privKey.Algo.Algorithm.Equal(oidSignatureSLHDSA256s):
+		pk, err := slhdsa.SHA2_256s.Scheme().UnmarshalBinaryPrivateKey(privKey.PrivateKey)
+		return pk, nil, err
+	case privKey.Algo.Algorithm.Equal(oidSignatureSLHDSA256f):
+		pk, err := slhdsa.SHA2_256f.Scheme().UnmarshalBinaryPrivateKey(privKey.PrivateKey)
+		return pk, nil, err
+	case privKey.Algo.Algorithm.Equal(oidSignatureSLHDSAShake128s):
+		pk, err := slhdsa.SHAKE_128s.Scheme().UnmarshalBinaryPrivateKey(privKey.PrivateKey)
+		return pk, nil, err
+	case privKey.Algo.Algorithm.Equal(oidSignatureSLHDSAShake128f):
+		pk, err := slhdsa.SHAKE_128f.Scheme().UnmarshalBinaryPrivateKey(privKey.PrivateKey)
+		return pk, nil, err
+	case privKey.Algo.Algorithm.Equal(oidSignatureSLHDSAShake192s):
+		pk, err := slhdsa.SHAKE_192s.Scheme().UnmarshalBinaryPrivateKey(privKey.PrivateKey)
+		return pk, nil, err
+	case privKey.Algo.Algorithm.Equal(oidSignatureSLHDSAShake192f):
+		pk, err := slhdsa.SHAKE_192f.Scheme().UnmarshalBinaryPrivateKey(privKey.PrivateKey)
+		return pk, nil, err
+	case privKey.Algo.Algorithm.Equal(oidSignatureSLHDSAShake256s):
+		pk, err := slhdsa.SHAKE_256s.Scheme().UnmarshalBinaryPrivateKey(privKey.PrivateKey)
+		return pk, nil, err
+	case privKey.Algo.Algorithm.Equal(oidSignatureSLHDSAShake256f):
+		pk, err := slhdsa.SHAKE_256f.Scheme().UnmarshalBinaryPrivateKey(privKey.PrivateKey)
+		return pk, nil, err
 	default:
 		return nil, nil, fmt.Errorf("x509: PKCS#8 wrapping contained private key with unknown algorithm: %v", privKey.Algo.Algorithm)
 	}
