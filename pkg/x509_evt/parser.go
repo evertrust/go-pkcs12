@@ -13,6 +13,9 @@ import (
 	"encoding/asn1"
 	"errors"
 	"fmt"
+	"github.com/cloudflare/circl/kem/mlkem/mlkem1024"
+	"github.com/cloudflare/circl/kem/mlkem/mlkem512"
+	"github.com/cloudflare/circl/kem/mlkem/mlkem768"
 	"github.com/cloudflare/circl/sign/mldsa/mldsa44"
 	"github.com/cloudflare/circl/sign/mldsa/mldsa65"
 	"github.com/cloudflare/circl/sign/mldsa/mldsa87"
@@ -343,6 +346,12 @@ func parsePublicKey(keyData *publicKeyInfo) (any, error) {
 			return nil, errors.New("x509: zero or negative DSA parameter")
 		}
 		return pub, nil
+	case oid.Equal(oidPublicKeyMLKEM512):
+		return mlkem512.Scheme().UnmarshalBinaryPublicKey(der)
+	case oid.Equal(oidPublicKeyMLKEM768):
+		return mlkem768.Scheme().UnmarshalBinaryPublicKey(der)
+	case oid.Equal(oidPublicKeyMLKEM1024):
+		return mlkem1024.Scheme().UnmarshalBinaryPublicKey(der)
 	case oid.Equal(oidSignatureMLDSA44):
 		if len(params.FullBytes) != 0 {
 			return nil, errors.New("x509: MLDSA-44 key encoded with illegal parameters")
@@ -358,7 +367,6 @@ func parsePublicKey(keyData *publicKeyInfo) (any, error) {
 		var pk mldsa44.PublicKey
 		pk.Unpack(&sizedBuffer)
 		return &pk, nil
-
 	case oid.Equal(oidSignatureMLDSA65):
 		if len(params.FullBytes) != 0 {
 			return nil, errors.New("x509: MLDSA-65 key encoded with illegal parameters")
@@ -374,7 +382,6 @@ func parsePublicKey(keyData *publicKeyInfo) (any, error) {
 		var pk mldsa65.PublicKey
 		pk.Unpack(&sizedBuffer)
 		return &pk, nil
-
 	case oid.Equal(oidSignatureMLDSA87):
 		if len(params.FullBytes) != 0 {
 			return nil, errors.New("x509: MLDSA-87 key encoded with illegal parameters")
@@ -390,8 +397,11 @@ func parsePublicKey(keyData *publicKeyInfo) (any, error) {
 		var pk mldsa87.PublicKey
 		pk.Unpack(&sizedBuffer)
 		return &pk, nil
-
 	default:
+		if slhdsaId, err := oidToSlhdsaId(oid); err == nil {
+			return slhdsaId.Scheme().UnmarshalBinaryPublicKey(der)
+		}
+
 		return nil, errors.New("x509: unknown public key algorithm")
 	}
 }

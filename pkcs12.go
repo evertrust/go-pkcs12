@@ -19,6 +19,7 @@ package pkcs12 // import "software.sslmate.com/src/go-pkcs12"
 
 import (
 	"crypto"
+	"crypto/ecdh"
 	"crypto/ecdsa"
 	"crypto/rand"
 	"crypto/rsa"
@@ -31,6 +32,9 @@ import (
 	"errors"
 	"fmt"
 	"github.com/EverTrust/go-pkcs12/pkg/x509_evt"
+	"github.com/cloudflare/circl/kem/mlkem/mlkem1024"
+	"github.com/cloudflare/circl/kem/mlkem/mlkem512"
+	"github.com/cloudflare/circl/kem/mlkem/mlkem768"
 	"github.com/cloudflare/circl/sign/mldsa/mldsa44"
 	"github.com/cloudflare/circl/sign/mldsa/mldsa65"
 	"github.com/cloudflare/circl/sign/mldsa/mldsa87"
@@ -496,6 +500,9 @@ func DecodeChain(pfxData []byte, password string) (privateKey any, alternatePriv
 			match = casted.Equal(privateKey.(crypto.Signer).Public())
 		case slhdsa.PublicKey:
 			match = casted.Equal(privateKey.(crypto.Signer).Public())
+		case *mlkem512.PublicKey, *mlkem768.PublicKey, *mlkem1024.PublicKey, *ecdh.PublicKey:
+			// These are always leaf
+			match = true
 		default:
 			// Do nothing, will not match
 		}

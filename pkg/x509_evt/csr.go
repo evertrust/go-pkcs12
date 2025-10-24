@@ -604,6 +604,9 @@ const (
 	slhdsa192fShakePubAlgorithm = x509.PublicKeyAlgorithm(18)
 	slhdsa256sShakePubAlgorithm = x509.PublicKeyAlgorithm(19)
 	slhdsa256fShakePubAlgorithm = x509.PublicKeyAlgorithm(20)
+	mlkem512PubAlgorithm        = x509.PublicKeyAlgorithm(21)
+	mlkem768PubAlgorithm        = x509.PublicKeyAlgorithm(22)
+	mlkem1024PubAlgorithm       = x509.PublicKeyAlgorithm(23)
 )
 
 var (
@@ -806,100 +809,60 @@ func marshalPublicKey(pub any) (publicKeyBytes []byte, publicKeyAlgorithm pkix.A
 	return publicKeyBytes, publicKeyAlgorithm, nil
 }
 
-func slhdsaIdToOid(id slhdsa.ID) (asn1.ObjectIdentifier, error) {
-	var oid asn1.ObjectIdentifier
-	switch id {
-	case slhdsa.SHA2_128s:
-		oid = oidSignatureSLHDSA128s
-	case slhdsa.SHA2_128f:
-		oid = oidSignatureSLHDSA128f
-	case slhdsa.SHA2_192s:
-		oid = oidSignatureSLHDSA192s
-	case slhdsa.SHA2_192f:
-		oid = oidSignatureSLHDSA192f
-	case slhdsa.SHA2_256s:
-		oid = oidSignatureSLHDSA256s
-	case slhdsa.SHA2_256f:
-		oid = oidSignatureSLHDSA256f
-	case slhdsa.SHAKE_128s:
-		oid = oidSignatureSLHDSAShake128s
-	case slhdsa.SHAKE_128f:
-		oid = oidSignatureSLHDSAShake128f
-	case slhdsa.SHAKE_192s:
-		oid = oidSignatureSLHDSAShake192s
-	case slhdsa.SHAKE_192f:
-		oid = oidSignatureSLHDSAShake192f
-	case slhdsa.SHAKE_256s:
-		oid = oidSignatureSLHDSAShake256s
-	case slhdsa.SHAKE_256f:
-		oid = oidSignatureSLHDSAShake256f
-	default:
-		return nil, errors.New("unsupported slhdsa.ID")
+var slhdsaOids = map[slhdsa.ID]asn1.ObjectIdentifier{
+	slhdsa.SHA2_128s:  oidSignatureSLHDSA128s,
+	slhdsa.SHA2_128f:  oidSignatureSLHDSA128f,
+	slhdsa.SHA2_192s:  oidSignatureSLHDSA192s,
+	slhdsa.SHA2_192f:  oidSignatureSLHDSA192f,
+	slhdsa.SHA2_256s:  oidSignatureSLHDSA256s,
+	slhdsa.SHA2_256f:  oidSignatureSLHDSA256f,
+	slhdsa.SHAKE_128s: oidSignatureSLHDSAShake128s,
+	slhdsa.SHAKE_128f: oidSignatureSLHDSAShake128f,
+	slhdsa.SHAKE_192s: oidSignatureSLHDSAShake192s,
+	slhdsa.SHAKE_192f: oidSignatureSLHDSAShake192f,
+	slhdsa.SHAKE_256s: oidSignatureSLHDSAShake256s,
+	slhdsa.SHAKE_256f: oidSignatureSLHDSAShake256f,
+}
+
+func oidToSlhdsaId(oid asn1.ObjectIdentifier) (slhdsa.ID, error) {
+	for id, storedOid := range slhdsaOids {
+		if storedOid.Equal(oid) {
+			return id, nil
+		}
 	}
-	return oid, nil
+	return 0, errors.New("unsupported slhdsa.ID")
+}
+
+func slhdsaIdToOid(id slhdsa.ID) (asn1.ObjectIdentifier, error) {
+	if oid, ok := slhdsaOids[id]; ok {
+		return oid, nil
+	}
+	return nil, errors.New("unsupported slhdsa.ID")
 }
 
 func slhdsaIdToPubAlgorithm(id slhdsa.ID) (x509.PublicKeyAlgorithm, error) {
-	var alg x509.PublicKeyAlgorithm
-	switch id {
-	case slhdsa.SHA2_128s:
-		alg = slhdsa128sPubAlgorithm
-	case slhdsa.SHA2_128f:
-		alg = slhdsa128fPubAlgorithm
-	case slhdsa.SHA2_192s:
-		alg = slhdsa192sPubAlgorithm
-	case slhdsa.SHA2_192f:
-		alg = slhdsa192fPubAlgorithm
-	case slhdsa.SHA2_256s:
-		alg = slhdsa256sPubAlgorithm
-	case slhdsa.SHA2_256f:
-		alg = slhdsa256fPubAlgorithm
-	case slhdsa.SHAKE_128s:
-		alg = slhdsa128sShakePubAlgorithm
-	case slhdsa.SHAKE_128f:
-		alg = slhdsa128fShakePubAlgorithm
-	case slhdsa.SHAKE_192s:
-		alg = slhdsa192sShakePubAlgorithm
-	case slhdsa.SHAKE_192f:
-		alg = slhdsa192fShakePubAlgorithm
-	case slhdsa.SHAKE_256s:
-		alg = slhdsa256sShakePubAlgorithm
-	case slhdsa.SHAKE_256f:
-		alg = slhdsa256fShakePubAlgorithm
-	default:
-		return x509.UnknownPublicKeyAlgorithm, errors.New("unsupported slhdsa.ID")
+	oid, err := slhdsaIdToOid(id)
+	if err != nil {
+		return x509.UnknownPublicKeyAlgorithm, err
 	}
-	return alg, nil
+
+	for _, details := range signatureAlgorithmDetails {
+		if oid.Equal(details.oid) {
+			return details.pubKeyAlgo, nil
+		}
+	}
+	return x509.UnknownPublicKeyAlgorithm, errors.New("unsupported slhdsa.ID")
 }
+
 func slhdsaIdToSigAlgorithm(id slhdsa.ID) (x509.SignatureAlgorithm, error) {
-	var alg x509.SignatureAlgorithm
-	switch id {
-	case slhdsa.SHA2_128s:
-		alg = slhdsa128sSigAlgorithm
-	case slhdsa.SHA2_128f:
-		alg = slhdsa128fSigAlgorithm
-	case slhdsa.SHA2_192s:
-		alg = slhdsa192sSigAlgorithm
-	case slhdsa.SHA2_192f:
-		alg = slhdsa192fSigAlgorithm
-	case slhdsa.SHA2_256s:
-		alg = slhdsa256sSigAlgorithm
-	case slhdsa.SHA2_256f:
-		alg = slhdsa256fSigAlgorithm
-	case slhdsa.SHAKE_128s:
-		alg = slhdsa128sShakeSigAlgorithm
-	case slhdsa.SHAKE_128f:
-		alg = slhdsa128fShakeSigAlgorithm
-	case slhdsa.SHAKE_192s:
-		alg = slhdsa192sShakeSigAlgorithm
-	case slhdsa.SHAKE_192f:
-		alg = slhdsa192fShakeSigAlgorithm
-	case slhdsa.SHAKE_256s:
-		alg = slhdsa256sShakeSigAlgorithm
-	case slhdsa.SHAKE_256f:
-		alg = slhdsa256fShakeSigAlgorithm
-	default:
-		return x509.UnknownSignatureAlgorithm, errors.New("unsupported slhdsa.ID")
+	oid, err := slhdsaIdToOid(id)
+	if err != nil {
+		return x509.UnknownSignatureAlgorithm, err
 	}
-	return alg, nil
+	for _, details := range signatureAlgorithmDetails {
+		if oid.Equal(details.oid) {
+			return details.algo, nil
+		}
+	}
+	return x509.UnknownSignatureAlgorithm, errors.New("unsupported slhdsa.ID")
 }

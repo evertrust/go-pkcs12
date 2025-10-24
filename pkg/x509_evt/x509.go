@@ -62,7 +62,6 @@ var (
 	oidPublicKeyMLKEM512  = asn1.ObjectIdentifier{2, 16, 840, 1, 101, 3, 4, 4, 1}
 	oidPublicKeyMLKEM768  = asn1.ObjectIdentifier{2, 16, 840, 1, 101, 3, 4, 4, 2}
 	oidPublicKeyMLKEM1024 = asn1.ObjectIdentifier{2, 16, 840, 1, 101, 3, 4, 4, 3}
-	oidPublicKeySLHDSA    = asn1.ObjectIdentifier{2, 16, 840, 1, 101, 3, 4, 4, 3}
 )
 
 // OIDs for signature algorithms
@@ -441,13 +440,20 @@ func getPublicKeyAlgorithmFromOID(oid asn1.ObjectIdentifier) x509.PublicKeyAlgor
 		return x509.ECDSA
 	case oid.Equal(oidPublicKeyEd25519):
 		return x509.Ed25519
-	case oid.Equal(oidSignatureMLDSA44):
-		return mldsa44PubAlgorithm
-	case oid.Equal(oidSignatureMLDSA65):
-		return mldsa65PubAlgorithm
-	case oid.Equal(oidSignatureMLDSA87):
-		return mldsa87PubAlgorithm
+	case oid.Equal(oidPublicKeyMLKEM512):
+		return mlkem512PubAlgorithm
+	case oid.Equal(oidPublicKeyMLKEM768):
+		return mlkem768PubAlgorithm
+	case oid.Equal(oidPublicKeyMLKEM512):
+		return mlkem768PubAlgorithm
 	}
+
+	for _, supportedAlgs := range signatureAlgorithmDetails {
+		if oid.Equal(supportedAlgs.oid) {
+			return supportedAlgs.pubKeyAlgo
+		}
+	}
+
 	return x509.UnknownPublicKeyAlgorithm
 }
 
