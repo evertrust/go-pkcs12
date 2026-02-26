@@ -39,8 +39,9 @@ import (
 	"github.com/cloudflare/circl/sign/mldsa/mldsa65"
 	"github.com/cloudflare/circl/sign/mldsa/mldsa87"
 	"github.com/cloudflare/circl/sign/slhdsa"
-	"golang.org/x/crypto/ed25519"
 	"io"
+
+	"golang.org/x/crypto/ed25519"
 )
 
 // DefaultPassword is the string "changeit", a commonly-used password for
@@ -483,7 +484,7 @@ func DecodeChain(pfxData []byte, password string) (privateKey any, alternatePriv
 	}
 
 	// certificate value should be the one where the private key exists
-	for _, certInP12 := range caCerts {
+	for index, certInP12 := range caCerts {
 		match := false
 		switch casted := certInP12.PublicKey.(type) {
 		case *rsa.PublicKey:
@@ -507,7 +508,17 @@ func DecodeChain(pfxData []byte, password string) (privateKey any, alternatePriv
 			// Do nothing, will not match
 		}
 		if match {
+			previousCert := certificate // store previous certificate
 			certificate = certInP12
+			// remove certInP12 from caCerts
+			if index < len(caCerts)-1 {
+				caCerts = append(caCerts[:index], caCerts[index+1:]...)
+			} else {
+				caCerts = caCerts[:index]
+			}
+			// put previous certificate into caCerts at the beginning
+			caCerts = append([]*x509.Certificate{previousCert}, caCerts...)
+			break
 		}
 	}
 
