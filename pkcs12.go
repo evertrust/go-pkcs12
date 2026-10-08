@@ -50,6 +50,7 @@ type Encoder struct {
 	encryptionIterations int
 	saltLen              int
 	rand                 io.Reader
+	keyCodec             KeyCodec
 }
 
 // WithIterations creates a new Encoder identical to enc except that
@@ -338,7 +339,7 @@ func convertBag(bag *safeBag, password []byte) (*pem.Block, error) {
 	case bag.Id.Equal(oidPKCS8ShroundedKeyBag):
 		block.Type = privateKeyType
 
-		key, err := decodePkcs8ShroudedKeyBag(bag.Value.Bytes, password)
+		key, err := decodePkcs8ShroudedKeyBag(defaultKeyCodec, bag.Value.Bytes, password)
 		if err != nil {
 			return nil, err
 		}
@@ -400,8 +401,13 @@ func convertAttribute(attribute *pkcs12Attribute) (key, value string, err error)
 // pfxData.  Since PKCS#12 files often contain more than one certificate, you
 // probably want to use [DecodeChain] instead.
 func Decode(pfxData []byte, password string) (privateKey interface{}, certificate *x509.Certificate, err error) {
+	return NewDecoder().Decode(pfxData, password)
+}
+
+// Decode is the package-level [Decode] using the Decoder's KeyCodec.
+func (dec *Decoder) Decode(pfxData []byte, password string) (privateKey interface{}, certificate *x509.Certificate, err error) {
 	var caCerts []*x509.Certificate
-	privateKey, certificate, caCerts, err = DecodeChain(pfxData, password)
+	privateKey, certificate, caCerts, err = dec.DecodeChain(pfxData, password)
 	if len(caCerts) != 0 {
 		err = errors.New("pkcs12: expected exactly two safe bags in the PFX PDU")
 	}
@@ -415,6 +421,11 @@ func Decode(pfxData []byte, password string) (privateKey interface{}, certificat
 // be the leaf certificate, and subsequent certificates, if any, are assumed to
 // comprise the CA certificate chain.
 func DecodeChain(pfxData []byte, password string) (privateKey interface{}, certificate *x509.Certificate, caCerts []*x509.Certificate, err error) {
+	return NewDecoder().DecodeChain(pfxData, password)
+}
+
+// DecodeChain is the package-level [DecodeChain] using the Decoder's KeyCodec.
+func (dec *Decoder) DecodeChain(pfxData []byte, password string) (privateKey interface{}, certificate *x509.Certificate, caCerts []*x509.Certificate, err error) {
 	encodedPassword, err := bmpStringZeroTerminated(password)
 	if err != nil {
 		return nil, nil, nil, err
@@ -452,7 +463,7 @@ func DecodeChain(pfxData []byte, password string) (privateKey interface{}, certi
 				return nil, nil, nil, err
 			}
 
-			if privateKey, err = x509.ParsePKCS8PrivateKey(bag.Value.Bytes); err != nil {
+			if privateKey, err = dec.keyCodec.ParsePKCS8PrivateKey(bag.Value.Bytes); err != nil {
 				return nil, nil, nil, err
 			}
 		case bag.Id.Equal(oidPKCS8ShroundedKeyBag):
@@ -461,7 +472,7 @@ func DecodeChain(pfxData []byte, password string) (privateKey interface{}, certi
 				return nil, nil, nil, err
 			}
 
-			if privateKey, err = decodePkcs8ShroudedKeyBag(bag.Value.Bytes, encodedPassword); err != nil {
+			if privateKey, err = decodePkcs8ShroudedKeyBag(dec.keyCodec, bag.Value.Bytes, encodedPassword); err != nil {
 				return nil, nil, nil, err
 			}
 		}
@@ -486,6 +497,9 @@ func DecodeChain(pfxData []byte, password string) (privateKey interface{}, certi
 			match = casted.Equal(privateKey.(crypto.Signer).Public())
 		default:
 			// Do nothing, will not match
+		}
+		if !match {
+			match = publicKeyMatches(dec.keyCodec, certInP12, privateKey)
 		}
 		if match {
 			previousCert := certificate // store previous certificate
@@ -807,7 +821,7 @@ func (enc *Encoder) EncodeWithAttributes(privateKey interface{}, certificate *x5
 		keyBag.Value.Class = 2
 		keyBag.Value.Tag = 0
 		keyBag.Value.IsCompound = true
-		if keyBag.Value.Bytes, err = marshalPKCS8PrivateKey(certificate, privateKey); err != nil {
+		if keyBag.Value.Bytes, err = marshalPKCS8PrivateKey(enc.codec(), certificate, privateKey); err != nil {
 			return nil, err
 		}
 	} else {
@@ -815,7 +829,7 @@ func (enc *Encoder) EncodeWithAttributes(privateKey interface{}, certificate *x5
 		keyBag.Value.Class = 2
 		keyBag.Value.Tag = 0
 		keyBag.Value.IsCompound = true
-		if keyBag.Value.Bytes, err = encodePkcs8ShroudedKeyBag(enc.rand, certificate, privateKey, enc.keyAlgorithm, encodedPassword, enc.encryptionIterations, enc.saltLen); err != nil {
+		if keyBag.Value.Bytes, err = encodePkcs8ShroudedKeyBag(enc.codec(), enc.rand, certificate, privateKey, enc.keyAlgorithm, encodedPassword, enc.encryptionIterations, enc.saltLen); err != nil {
 			return nil, err
 		}
 	}
