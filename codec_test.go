@@ -208,3 +208,35 @@ func TestDecoderMatchesPackageFunctions(t *testing.T) {
 		t.Error("NewDecoder().DecodeChain and DecodeChain must return the same result")
 	}
 }
+
+// The zero Decoder and a nil codec decode with the default codec instead of panicking.
+func TestDecoderZeroValueAndNilCodec(t *testing.T) {
+	key, leaf, ca := newTestChain(t)
+	pfx, err := Modern2023.Encode(key.key, leaf, []*x509.Certificate{ca}, "password")
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoders := map[string]*Decoder{
+		"zero value": {},
+		"nil codec":  NewDecoder().WithKeyCodec(nil),
+	}
+	for name, dec := range decoders {
+		t.Run(name, func(t *testing.T) {
+			decoded, certificate, _, err := dec.DecodeChain(pfx, "password")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !decoded.(ed25519.PrivateKey).Equal(key.key) || !certificate.Equal(leaf) {
+				t.Error("unexpected decoding result")
+			}
+		})
+	}
+
+	nilCodecPFX, err := Modern2023.WithKeyCodec(nil).Encode(key.key, leaf, nil, "password")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := Decode(nilCodecPFX, "password"); err != nil {
+		t.Fatal(err)
+	}
+}

@@ -34,6 +34,7 @@ var defaultKeyCodec KeyCodec = x509KeyCodec{}
 
 // A Decoder contains methods for decoding PKCS#12 files with a given KeyCodec.
 // The package-level decoding functions use a Decoder with the default, crypto/x509 based codec.
+// The zero value is ready to use and decodes with the default codec.
 // A Decoder is safe for concurrent use by multiple goroutines.
 type Decoder struct {
 	keyCodec KeyCodec
@@ -41,11 +42,11 @@ type Decoder struct {
 
 // NewDecoder returns a Decoder that uses the default, crypto/x509 based KeyCodec.
 func NewDecoder() *Decoder {
-	return &Decoder{keyCodec: defaultKeyCodec}
+	return &Decoder{}
 }
 
 // WithKeyCodec returns a new Decoder identical to dec except that it parses private keys with
-// the given KeyCodec.
+// the given KeyCodec. A nil codec selects the default one.
 func (dec *Decoder) WithKeyCodec(codec KeyCodec) *Decoder {
 	d := *dec
 	d.keyCodec = codec
@@ -53,12 +54,19 @@ func (dec *Decoder) WithKeyCodec(codec KeyCodec) *Decoder {
 }
 
 // WithKeyCodec returns a new Encoder identical to enc except that it encodes private keys with
-// the given KeyCodec. Unlike WithRand and WithIterations, it does not modify enc, so the shared
+// the given KeyCodec, or the default one when codec is nil. Unlike WithRand and WithIterations, it does not modify enc, so the shared
 // package-level Encoders keep using the default codec.
 func (enc *Encoder) WithKeyCodec(codec KeyCodec) *Encoder {
 	e := *enc
 	e.keyCodec = codec
 	return &e
+}
+
+func (dec *Decoder) codec() KeyCodec {
+	if dec.keyCodec == nil {
+		return defaultKeyCodec
+	}
+	return dec.keyCodec
 }
 
 func (enc *Encoder) codec() KeyCodec {

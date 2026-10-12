@@ -463,7 +463,7 @@ func (dec *Decoder) DecodeChain(pfxData []byte, password string) (privateKey int
 				return nil, nil, nil, err
 			}
 
-			if privateKey, err = dec.keyCodec.ParsePKCS8PrivateKey(bag.Value.Bytes); err != nil {
+			if privateKey, err = dec.codec().ParsePKCS8PrivateKey(bag.Value.Bytes); err != nil {
 				return nil, nil, nil, err
 			}
 		case bag.Id.Equal(oidPKCS8ShroundedKeyBag):
@@ -472,7 +472,7 @@ func (dec *Decoder) DecodeChain(pfxData []byte, password string) (privateKey int
 				return nil, nil, nil, err
 			}
 
-			if privateKey, err = decodePkcs8ShroudedKeyBag(dec.keyCodec, bag.Value.Bytes, encodedPassword); err != nil {
+			if privateKey, err = decodePkcs8ShroudedKeyBag(dec.codec(), bag.Value.Bytes, encodedPassword); err != nil {
 				return nil, nil, nil, err
 			}
 		}
@@ -499,7 +499,7 @@ func (dec *Decoder) DecodeChain(pfxData []byte, password string) (privateKey int
 			// Do nothing, will not match
 		}
 		if !match {
-			match = publicKeyMatches(dec.keyCodec, certInP12, privateKey)
+			match = publicKeyMatches(dec.codec(), certInP12, privateKey)
 		}
 		if match {
 			previousCert := certificate // store previous certificate
