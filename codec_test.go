@@ -8,6 +8,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/asn1"
 	"io"
+	"math"
 	"math/big"
 	"testing"
 	"time"
@@ -63,15 +64,47 @@ func (testKeyCodec) MarshalPKCS8PrivateKey(privateKey interface{}) ([]byte, erro
 
 func (testKeyCodec) MarshalPKIXPublicKey(publicKey interface{}) ([]byte, error) {
 	if k, ok := publicKey.(*testPublicKey); ok {
-		return x509.MarshalPKIXPublicKey(k.key)
+		return marshalTestSPKI(k.key)
 	}
 	return x509.MarshalPKIXPublicKey(publicKey)
 }
 
+// marshalTestSPKI encodes a testKey public key with oidTestKey, so that crypto/x509 parses its
+// certificate with a nil PublicKey, like a post-quantum certificate.
+func marshalTestSPKI(publicKey ed25519.PublicKey) ([]byte, error) {
+	return asn1.Marshal(struct {
+		Algo      pkix.AlgorithmIdentifier
+		PublicKey asn1.BitString
+	}{
+		Algo:      pkix.AlgorithmIdentifier{Algorithm: oidTestKey},
+		PublicKey: asn1.BitString{Bytes: publicKey, BitLength: 8 * len(publicKey)},
+	})
+}
+
+// nonSignerKey is a private key that is not a crypto.Signer, such as a KEM key.
+type nonSignerKey struct{}
+
+// nonSignerCodec decodes testKey as a nonSignerKey.
+type nonSignerCodec struct {
+	testKeyCodec
+}
+
+func (c nonSignerCodec) ParsePKCS8PrivateKey(der []byte) (interface{}, error) {
+	key, err := c.testKeyCodec.ParsePKCS8PrivateKey(der)
+	if _, ok := key.(*testKey); ok {
+		return nonSignerKey{}, nil
+	}
+	return key, err
+}
+
 func newTestCert(t *testing.T, cn string, isCA bool, pub crypto.PublicKey, parent *x509.Certificate, signer crypto.Signer) *x509.Certificate {
 	t.Helper()
+	serial, err := rand.Int(rand.Reader, big.NewInt(math.MaxInt64))
+	if err != nil {
+		t.Fatal(err)
+	}
 	template := &x509.Certificate{
-		SerialNumber:          big.NewInt(time.Now().UnixNano()),
+		SerialNumber:          serial,
 		Subject:               pkix.Name{CommonName: cn},
 		NotBefore:             time.Now().Add(-time.Hour),
 		NotAfter:              time.Now().Add(time.Hour),
@@ -92,7 +125,8 @@ func newTestCert(t *testing.T, cn string, isCA bool, pub crypto.PublicKey, paren
 	return cert
 }
 
-// newTestChain returns a testKey, its certificate and the issuing CA certificate.
+// newTestChain returns a testKey, its certificate and the issuing CA certificate. The leaf
+// certificate carries an oidTestKey SubjectPublicKeyInfo that crypto/x509 does not parse.
 func newTestChain(t *testing.T) (*testKey, *x509.Certificate, *x509.Certificate) {
 	t.Helper()
 	_, caKey, err := ed25519.GenerateKey(rand.Reader)
@@ -105,7 +139,66 @@ func newTestChain(t *testing.T) (*testKey, *x509.Certificate, *x509.Certificate)
 		t.Fatal(err)
 	}
 	leaf := newTestCert(t, "test leaf", false, leafKey.Public(), ca, caKey)
+	spki, err := marshalTestSPKI(leafKey.Public().(ed25519.PublicKey))
+	if err != nil {
+		t.Fatal(err)
+	}
+	leaf = replaceSPKI(t, leaf, spki, caKey)
+	if leaf.PublicKey != nil {
+		t.Fatalf("expected crypto/x509 to leave the test public key unparsed, got %T", leaf.PublicKey)
+	}
 	return &testKey{key: leafKey}, leaf, ca
+}
+
+// tbsCertificate holds the fields of a v3 TBSCertificate as raw elements.
+type tbsCertificate struct {
+	Version      asn1.RawValue
+	SerialNumber asn1.RawValue
+	Signature    asn1.RawValue
+	Issuer       asn1.RawValue
+	Validity     asn1.RawValue
+	Subject      asn1.RawValue
+	PublicKey    asn1.RawValue
+	Extensions   asn1.RawValue
+}
+
+type certificate struct {
+	TBSCertificate     asn1.RawValue
+	SignatureAlgorithm asn1.RawValue
+	SignatureValue     asn1.BitString
+}
+
+// replaceSPKI returns cert with its SubjectPublicKeyInfo replaced by spki, signed again by the
+// Ed25519 CA key.
+func replaceSPKI(t *testing.T, cert *x509.Certificate, spki []byte, caKey ed25519.PrivateKey) *x509.Certificate {
+	t.Helper()
+	var tbs tbsCertificate
+	if _, err := asn1.Unmarshal(cert.RawTBSCertificate, &tbs); err != nil {
+		t.Fatal(err)
+	}
+	tbs.PublicKey = asn1.RawValue{FullBytes: spki}
+	rawTBS, err := asn1.Marshal(tbs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var outer certificate
+	if _, err := asn1.Unmarshal(cert.Raw, &outer); err != nil {
+		t.Fatal(err)
+	}
+	signature := ed25519.Sign(caKey, rawTBS)
+	der, err := asn1.Marshal(certificate{
+		TBSCertificate:     asn1.RawValue{FullBytes: rawTBS},
+		SignatureAlgorithm: outer.SignatureAlgorithm,
+		SignatureValue:     asn1.BitString{Bytes: signature, BitLength: 8 * len(signature)},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	replaced, err := x509.ParseCertificate(der)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return replaced
 }
 
 func TestKeyCodecRoundTrip(t *testing.T) {
@@ -173,6 +266,27 @@ func TestKeyCodecFindsLeafCertificate(t *testing.T) {
 	}
 }
 
+// A codec may return a private key that is not a crypto.Signer. Leaf matching must not panic on
+// the Ed25519 CA certificate in the chain, and the first certificate stays the leaf.
+func TestDecodeChainWithNonSignerKey(t *testing.T) {
+	key, leaf, ca := newTestChain(t)
+	pfx, err := Modern2023.WithKeyCodec(testKeyCodec{}).Encode(key, leaf, []*x509.Certificate{ca}, "password")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	decoded, certificate, caCerts, err := NewDecoder().WithKeyCodec(nonSignerCodec{}).DecodeChain(pfx, "password")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := decoded.(nonSignerKey); !ok {
+		t.Fatalf("expected nonSignerKey, got %T", decoded)
+	}
+	if !certificate.Equal(leaf) || len(caCerts) != 1 || !caCerts[0].Equal(ca) {
+		t.Error("expected the certificates in their original order")
+	}
+}
+
 func TestDefaultEncoderRejectsUnknownKeyType(t *testing.T) {
 	key, leaf, ca := newTestChain(t)
 	if _, err := Modern2023.Encode(key, leaf, []*x509.Certificate{ca}, "password"); err == nil {
@@ -209,27 +323,37 @@ func TestDecoderMatchesPackageFunctions(t *testing.T) {
 	}
 }
 
-// The zero Decoder and a nil codec decode with the default codec instead of panicking.
+// The zero Decoder and a nil codec decode with the default codec instead of panicking, through
+// both the shrouded and the plain key bag.
 func TestDecoderZeroValueAndNilCodec(t *testing.T) {
 	key, leaf, ca := newTestChain(t)
-	pfx, err := Modern2023.Encode(key.key, leaf, []*x509.Certificate{ca}, "password")
-	if err != nil {
-		t.Fatal(err)
+	encoders := map[string]struct {
+		encoder  *Encoder
+		password string
+	}{
+		"shrouded key bag": {Modern2023, "password"},
+		"plain key bag":    {Passwordless, ""},
 	}
 	decoders := map[string]*Decoder{
 		"zero value": {},
 		"nil codec":  NewDecoder().WithKeyCodec(nil),
 	}
-	for name, dec := range decoders {
-		t.Run(name, func(t *testing.T) {
-			decoded, certificate, _, err := dec.DecodeChain(pfx, "password")
-			if err != nil {
-				t.Fatal(err)
-			}
-			if !decoded.(ed25519.PrivateKey).Equal(key.key) || !certificate.Equal(leaf) {
-				t.Error("unexpected decoding result")
-			}
-		})
+	for encoderName, e := range encoders {
+		pfx, err := e.encoder.Encode(key.key, leaf, []*x509.Certificate{ca}, e.password)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for decoderName, dec := range decoders {
+			t.Run(encoderName+"/"+decoderName, func(t *testing.T) {
+				decoded, certificate, _, err := dec.DecodeChain(pfx, e.password)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !decoded.(ed25519.PrivateKey).Equal(key.key) || !certificate.Equal(leaf) {
+					t.Error("unexpected decoding result")
+				}
+			})
+		}
 	}
 
 	nilCodecPFX, err := Modern2023.WithKeyCodec(nil).Encode(key.key, leaf, nil, "password")
@@ -238,5 +362,15 @@ func TestDecoderZeroValueAndNilCodec(t *testing.T) {
 	}
 	if _, _, err := Decode(nilCodecPFX, "password"); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestDecoderWithKeyCodecLeavesReceiverUnchanged(t *testing.T) {
+	dec := NewDecoder().WithKeyCodec(testKeyCodec{})
+	if withNil := dec.WithKeyCodec(nil); withNil == dec {
+		t.Fatal("WithKeyCodec must return a new Decoder")
+	}
+	if _, ok := dec.keyCodec.(testKeyCodec); !ok {
+		t.Error("WithKeyCodec must not modify its receiver")
 	}
 }

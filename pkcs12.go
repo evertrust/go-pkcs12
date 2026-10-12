@@ -18,7 +18,6 @@
 package pkcs12 // import "software.sslmate.com/src/go-pkcs12"
 
 import (
-	"crypto"
 	"crypto/ecdsa"
 	"crypto/rand"
 	"crypto/rsa"
@@ -31,8 +30,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-
-	"golang.org/x/crypto/ed25519"
 )
 
 // DefaultPassword is the string "changeit", a commonly-used password for
@@ -426,6 +423,7 @@ func DecodeChain(pfxData []byte, password string) (privateKey interface{}, certi
 
 // DecodeChain is the package-level [DecodeChain] using the Decoder's KeyCodec.
 func (dec *Decoder) DecodeChain(pfxData []byte, password string) (privateKey interface{}, certificate *x509.Certificate, caCerts []*x509.Certificate, err error) {
+	codec := dec.codec()
 	encodedPassword, err := bmpStringZeroTerminated(password)
 	if err != nil {
 		return nil, nil, nil, err
@@ -463,7 +461,7 @@ func (dec *Decoder) DecodeChain(pfxData []byte, password string) (privateKey int
 				return nil, nil, nil, err
 			}
 
-			if privateKey, err = dec.codec().ParsePKCS8PrivateKey(bag.Value.Bytes); err != nil {
+			if privateKey, err = codec.ParsePKCS8PrivateKey(bag.Value.Bytes); err != nil {
 				return nil, nil, nil, err
 			}
 		case bag.Id.Equal(oidPKCS8ShroundedKeyBag):
@@ -472,7 +470,7 @@ func (dec *Decoder) DecodeChain(pfxData []byte, password string) (privateKey int
 				return nil, nil, nil, err
 			}
 
-			if privateKey, err = decodePkcs8ShroudedKeyBag(dec.codec(), bag.Value.Bytes, encodedPassword); err != nil {
+			if privateKey, err = decodePkcs8ShroudedKeyBag(codec, bag.Value.Bytes, encodedPassword); err != nil {
 				return nil, nil, nil, err
 			}
 		}
@@ -486,22 +484,12 @@ func (dec *Decoder) DecodeChain(pfxData []byte, password string) (privateKey int
 	}
 
 	// certificate value should be the one where the private key exists
+	holdsPrivateKey := newLeafMatcher(codec, privateKey)
+	if holdsPrivateKey(certificate) {
+		return
+	}
 	for index, certInP12 := range caCerts {
-		match := false
-		switch casted := certInP12.PublicKey.(type) {
-		case *rsa.PublicKey:
-			match = casted.Equal(privateKey.(crypto.Signer).Public())
-		case *ecdsa.PublicKey:
-			match = casted.Equal(privateKey.(crypto.Signer).Public())
-		case ed25519.PublicKey:
-			match = casted.Equal(privateKey.(crypto.Signer).Public())
-		default:
-			// Do nothing, will not match
-		}
-		if !match {
-			match = publicKeyMatches(dec.codec(), certInP12, privateKey)
-		}
-		if match {
+		if holdsPrivateKey(certInP12) {
 			previousCert := certificate // store previous certificate
 			certificate = certInP12
 			// remove certInP12 from caCerts

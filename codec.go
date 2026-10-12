@@ -9,6 +9,15 @@ import (
 // KeyCodec converts private keys to and from their PKCS#8 encoding, and public keys to their
 // SubjectPublicKeyInfo encoding. Supplying one lets callers handle key types that crypto/x509
 // does not know, such as post-quantum keys, without this package depending on them.
+//
+// Every decoded private key goes through ParsePKCS8PrivateKey. On encode, RSA keys are written by
+// this package itself, to add the key usage attributes, and never reach MarshalPKCS8PrivateKey;
+// every other key does.
+//
+// MarshalPKIXPublicKey must return exactly the SubjectPublicKeyInfo bytes found in the
+// certificate of the key, since the leaf certificate of a chain is found by comparing them.
+//
+// Implementations must be safe for concurrent use, as Encoder and Decoder are.
 type KeyCodec interface {
 	ParsePKCS8PrivateKey(der []byte) (privateKey interface{}, err error)
 	MarshalPKCS8PrivateKey(privateKey interface{}) (der []byte, err error)
@@ -76,16 +85,21 @@ func (enc *Encoder) codec() KeyCodec {
 	return enc.keyCodec
 }
 
-// publicKeyMatches reports whether certificate holds the public key of privateKey, by comparing
-// SubjectPublicKeyInfo encodings. It works for key types crypto/x509 leaves unparsed.
-func publicKeyMatches(codec KeyCodec, certificate *x509.Certificate, privateKey interface{}) bool {
+// newLeafMatcher returns a function reporting whether a certificate holds the public key of
+// privateKey. Certificates whose public key crypto/x509 parsed are compared by key; the others,
+// such as post-quantum ones left unparsed, by SubjectPublicKeyInfo encoding. A private key that is
+// not a crypto.Signer matches no certificate.
+func newLeafMatcher(codec KeyCodec, privateKey interface{}) func(*x509.Certificate) bool {
 	signer, ok := privateKey.(crypto.Signer)
 	if !ok {
-		return false
+		return func(*x509.Certificate) bool { return false }
 	}
-	spki, err := codec.MarshalPKIXPublicKey(signer.Public())
-	if err != nil {
-		return false
+	publicKey := signer.Public()
+	spki, spkiErr := codec.MarshalPKIXPublicKey(publicKey)
+	return func(certificate *x509.Certificate) bool {
+		if parsed, ok := certificate.PublicKey.(interface{ Equal(crypto.PublicKey) bool }); ok && parsed.Equal(publicKey) {
+			return true
+		}
+		return spkiErr == nil && bytes.Equal(spki, certificate.RawSubjectPublicKeyInfo)
 	}
-	return bytes.Equal(spki, certificate.RawSubjectPublicKeyInfo)
 }
