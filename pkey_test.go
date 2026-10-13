@@ -67,7 +67,7 @@ ayzhr3Fk02N0kDKS6Uz58HBCoA0wCwYDVR0PMQQDAgeA
 	if err != nil {
 		t.Fatal(err)
 	}
-	asn1Data, err := marshalPKCS8PrivateKey(cert, key)
+	asn1Data, err := marshalPKCS8PrivateKey(defaultKeyCodec, cert, key)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -132,7 +132,7 @@ rOCwZ+pNzdfXa2rpLwN7uCk=
 	if err != nil {
 		t.Fatal(err)
 	}
-	asn1val, err := marshalPKCS8PrivateKey(cert, key)
+	asn1val, err := marshalPKCS8PrivateKey(defaultKeyCodec, cert, key)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -210,7 +210,7 @@ rOCwZ+pNzdfXa2rpLwN7uCk=
 	if err != nil {
 		t.Fatal(err)
 	}
-	asn1val, err := marshalPKCS8PrivateKey(cert, key)
+	asn1val, err := marshalPKCS8PrivateKey(defaultKeyCodec, cert, key)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -295,7 +295,7 @@ PhDP1i21jhMyUUoE2XsXUlU=
 	if err != nil {
 		t.Fatal(err)
 	}
-	asn1val, err := marshalPKCS8PrivateKey(cert, key)
+	asn1val, err := marshalPKCS8PrivateKey(defaultKeyCodec, cert, key)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -373,7 +373,7 @@ PhDP1i21jhMyUUoE2XsXUlU=
 	if err != nil {
 		t.Fatal(err)
 	}
-	asn1val, err := marshalPKCS8PrivateKey(cert, key)
+	asn1val, err := marshalPKCS8PrivateKey(defaultKeyCodec, cert, key)
 	if err != nil {
 		t.Fatal(err)
 	}

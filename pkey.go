@@ -29,7 +29,7 @@ var (
 )
 
 // Custom encoding function for RSA to handle key attributes
-func marshalPKCS8PrivateKey(certificate *x509.Certificate, privateKey interface{}) (asn1Data []byte, err error) {
+func marshalPKCS8PrivateKey(codec KeyCodec, certificate *x509.Certificate, privateKey interface{}) (asn1Data []byte, err error) {
 	switch k := privateKey.(type) {
 	case *rsa.PrivateKey:
 		var privKeyWithAttr pkcs8
@@ -57,7 +57,7 @@ func marshalPKCS8PrivateKey(certificate *x509.Certificate, privateKey interface{
 		privKeyWithAttr.Attributes = []attribute{attr}
 		return asn1.Marshal(privKeyWithAttr)
 	default:
-		return x509.MarshalPKCS8PrivateKey(privateKey)
+		return codec.MarshalPKCS8PrivateKey(privateKey)
 	}
 }
 
