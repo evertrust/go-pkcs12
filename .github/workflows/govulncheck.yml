@@ -1,0 +1,26 @@
+name: govulncheck
+
+on:
+  schedule:
+    # Every Monday at 06:00 UTC
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  govulncheck:
+    name: Scan master for known vulnerabilities
+    runs-on: runs-on=${{ github.run_id }}/runner=evertrust
+    steps:
+      - name: Setup runner
+        uses: runs-on/action@v2
+
+      - name: Run govulncheck
+        uses: golang/govulncheck-action@v1
+        with:
+          repo-checkout: true
+          go-version-input: stable
+          check-latest: true
+          go-package: ./...
